@@ -21,10 +21,14 @@ class TransportRepository {
 
   final MalaysiaTransportApi _api;
   final LocationService _locationService;
-
   final Map<TransportAgency, List<GtfsStop>> _stopCache = {};
 
-  Future<List<GtfsStop>> stopsFor(TransportAgency agency, {bool refresh = false}) async {
+  Future<Position> currentPosition() => _locationService.getCurrentPosition();
+
+  Future<List<GtfsStop>> stopsFor(
+    TransportAgency agency, {
+    bool refresh = false,
+  }) async {
     if (!refresh && _stopCache.containsKey(agency)) {
       return _stopCache[agency]!;
     }
@@ -37,11 +41,12 @@ class TransportRepository {
     TransportAgency agency = TransportAgency.prasaranaRail,
     double radiusMeters = 5000,
     int limit = 30,
+    Position? position,
   }) async {
-    final Position position = await _locationService.getCurrentPosition();
+    final currentPosition = position ?? await _locationService.getCurrentPosition();
     final stops = await stopsFor(agency);
     final distance = const Distance();
-    final current = LatLng(position.latitude, position.longitude);
+    final current = LatLng(currentPosition.latitude, currentPosition.longitude);
 
     final nearby = <NearbyStop>[];
     for (final stop in stops) {
