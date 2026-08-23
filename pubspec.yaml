@@ -37,6 +37,10 @@ dependencies:
   supabase_flutter: ^2.17.2
   image_picker: ^1.2.3
   http: ^1.6.0
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
+  gtfs_realtime_bindings: ^1.2.0
+  archive: ^4.2.0
 
 dev_dependencies:
   flutter_test:
