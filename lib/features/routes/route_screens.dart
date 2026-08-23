@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../data/demo_data.dart';
+import 'ridership_service.dart';
 
 class RoutePlannerScreen extends StatefulWidget {
   const RoutePlannerScreen({super.key});
@@ -32,6 +33,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             ),
             const SizedBox(height: 28),
             const FareEstimateCard(),
+            const SizedBox(height: 28),
+            const RidershipInsightsCard(),
           ] else ...[
             const _SortTabs(),
             const SizedBox(height: 16),
@@ -49,11 +52,313 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             ),
             const SizedBox(height: 18),
             const RouteDetailsCard(),
+            const SizedBox(height: 18),
+            const RidershipInsightsCard(),
           ],
         ],
       ),
     );
   }
+}
+
+class RidershipInsightsCard extends StatefulWidget {
+  const RidershipInsightsCard({super.key});
+
+  @override
+  State<RidershipInsightsCard> createState() => _RidershipInsightsCardState();
+}
+
+class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
+  final _ridershipService = RidershipService();
+  late Future<RidershipSnapshot> _snapshotFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotFuture = _ridershipService.fetchLatestSnapshot();
+  }
+
+  void _refresh() {
+    setState(() {
+      _snapshotFuture = _ridershipService.fetchLatestSnapshot();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<RidershipSnapshot>(
+      future: _snapshotFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const AppCard(
+            child: SizedBox(
+              height: 150,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return AppCard(
+            color: const Color(0xFFFFF1F2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionTitle('Ridership Insights'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Unable to load government ridership data.',
+                  style: TextStyle(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final data = snapshot.requireData;
+
+        return AppCard(
+          color: const Color(0xFFF8FAFC),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(child: SectionTitle('Ridership Insights')),
+                  IconButton(
+                    tooltip: 'Refresh data',
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _RidershipHero(snapshot: data),
+              const SizedBox(height: 14),
+              _ModeStatWrap(snapshot: data),
+              const SizedBox(height: 18),
+              _RidershipChart(values: data.recentTotals),
+              const SizedBox(height: 10),
+              Text(
+                'Latest official data: ${_formatDate(data.date)} • Source: data.gov.my ridership_headline',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RidershipHero extends StatelessWidget {
+  const _RidershipHero({required this.snapshot});
+
+  final RidershipSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 96),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          const TransportIcon(
+            icon: Icons.insights_rounded,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Daily network trips',
+                  style: TextStyle(
+                    color: Color(0xFFD8E7FF),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  _formatTrips(snapshot.total),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeStatWrap extends StatelessWidget {
+  const _ModeStatWrap({required this.snapshot});
+
+  final RidershipSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tileWidth = constraints.maxWidth >= 720
+            ? (constraints.maxWidth - 36) / 4
+            : (constraints.maxWidth - 12) / 2;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _ModeStatTile(
+              width: tileWidth,
+              label: 'MRT',
+              value: _formatTrips(snapshot.mrt),
+              color: const Color(0xFF10A66B),
+            ),
+            _ModeStatTile(
+              width: tileWidth,
+              label: 'LRT',
+              value: _formatTrips(snapshot.lrt),
+              color: const Color(0xFFEF4444),
+            ),
+            _ModeStatTile(
+              width: tileWidth,
+              label: 'KTM',
+              value: _formatTrips(snapshot.ktm),
+              color: const Color(0xFF7C3AED),
+            ),
+            _ModeStatTile(
+              width: tileWidth,
+              label: 'Bus',
+              value: _formatTrips(snapshot.bus),
+              color: const Color(0xFF0EA5E9),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ModeStatTile extends StatelessWidget {
+  const _ModeStatTile({
+    required this.width,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final double width;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      constraints: const BoxConstraints(minHeight: 86),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: .18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RidershipChart extends StatelessWidget {
+  const _RidershipChart({required this.values});
+
+  final List<int> values;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = values.isEmpty
+        ? 1
+        : values.reduce((a, b) => a > b ? a : b);
+
+    return Container(
+      height: 170,
+      padding: const EdgeInsets.fromLTRB(12, 18, 12, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: values.map((value) {
+          final height = 28 + (value / maxValue * 112);
+          return Expanded(
+            child: Tooltip(
+              message: _formatTrips(value),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(
+                  width: 12,
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary2,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+String _formatTrips(int value) {
+  if (value >= 1000000) {
+    return '${(value / 1000000).toStringAsFixed(1)}M';
+  }
+  if (value >= 1000) {
+    return '${(value / 1000).toStringAsFixed(1)}K';
+  }
+  return value.toString();
+}
+
+String _formatDate(DateTime date) {
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 }
 
 class _PlannerForm extends StatelessWidget {
