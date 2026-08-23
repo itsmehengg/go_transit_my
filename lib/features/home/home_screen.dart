@@ -1,14 +1,71 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../data/demo_data.dart';
+import '../profile/profile_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _profileService = ProfileService();
+  Timer? _clockTimer;
+  DateTime _now = DateTime.now();
+  String? _fullName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadUserName() async {
+    final profile = await _profileService.getCurrentProfile();
+    final metadataName =
+        _profileService.currentUser?.userMetadata?['full_name'] as String?;
+
+    if (!mounted) return;
+    setState(() {
+      _fullName =
+          profile?['full_name'] as String? ?? metadataName ?? 'GoTransit User';
+    });
+  }
+
+  String get _greeting {
+    final hour = _now.hour;
+    if (hour < 12) return 'Good Morning,';
+    if (hour < 18) return 'Good Afternoon,';
+    return 'Good Evening,';
+  }
+
+  String get _timeLabel {
+    final hour = _now.hour;
+    final minute = _now.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    return '$displayHour:$minute $period';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final displayName = _fullName ?? 'Loading...';
+
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -16,17 +73,17 @@ class HomeScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Good Morning,',
-                        style: TextStyle(color: AppColors.muted),
+                        '$_greeting $_timeLabel',
+                        style: const TextStyle(color: AppColors.muted),
                       ),
                       Text(
-                        'Yong Wen 👋',
-                        style: TextStyle(
+                        '$displayName 👋',
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
                         ),

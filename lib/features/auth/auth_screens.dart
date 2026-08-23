@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
+import 'auth_service.dart';
 import '../shell/app_shell.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -153,9 +154,56 @@ class OnboardingScreen extends StatelessWidget {
   }
 }
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   static const routeName = '/login';
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _authService = AuthService();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  bool _showPassword = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Enter your email and password.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _authService.signIn(email: email, password: password);
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppShell.routeName);
+    } catch (error) {
+      setState(() => _errorMessage = _authService.readableAuthError(error));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,18 +234,35 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 40),
                   const _Label('Email'),
-                  const TextField(
-                    decoration: InputDecoration(
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
                       hintText: 'youremail@gmail.com',
                     ),
                   ),
                   const SizedBox(height: 24),
                   const _Label('Password'),
-                  const TextField(
-                    obscureText: true,
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: !_showPassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _isLoading ? null : _login(),
                     decoration: InputDecoration(
                       hintText: '••••••••',
-                      suffixIcon: Icon(Icons.visibility_off_outlined),
+                      suffixIcon: IconButton(
+                        tooltip: _showPassword
+                            ? 'Hide password'
+                            : 'Show password',
+                        onPressed: () =>
+                            setState(() => _showPassword = !_showPassword),
+                        icon: Icon(
+                          _showPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
                     ),
                   ),
                   Align(
@@ -208,12 +273,25 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pushReplacementNamed(
-                      context,
-                      AppShell.routeName,
+                  if (_errorMessage != null) ...[
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    child: const Text('Login'),
+                    const SizedBox(height: 12),
+                  ],
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _login,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Login'),
                   ),
                   const SizedBox(height: 36),
                   const Row(
@@ -254,9 +332,91 @@ class LoginScreen extends StatelessWidget {
   }
 }
 
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
   static const routeName = '/register';
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _authService = AuthService();
+  final _fullNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
+  bool _showPassword = false;
+  bool _showConfirmPassword = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    final fullName = _fullNameController.text.trim();
+    final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (fullName.isEmpty || email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Enter your name, email, and password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      return;
+    }
+
+    if (password != confirmPassword) {
+      setState(() => _errorMessage = 'Passwords do not match.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _authService.signUp(
+        fullName: fullName,
+        email: email,
+        phone: phone,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      if (response.session == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account created. Please confirm your email first.'),
+          ),
+        );
+        Navigator.pushReplacementNamed(context, LoginScreen.routeName);
+      } else {
+        Navigator.pushReplacementNamed(context, AppShell.routeName);
+      }
+    } catch (error) {
+      setState(() => _errorMessage = _authService.readableAuthError(error));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,34 +435,90 @@ class RegisterScreen extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           const _Label('Full Name'),
-          const TextField(decoration: InputDecoration(hintText: 'Yong Wen')),
+          TextField(
+            controller: _fullNameController,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(),
+          ),
           const SizedBox(height: 20),
           const _Label('Email'),
-          const TextField(
-            decoration: InputDecoration(hintText: 'youremail@gmail.com'),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(),
           ),
           const SizedBox(height: 20),
           const _Label('Phone Number'),
-          const TextField(
-            decoration: InputDecoration(hintText: '012-345 6789'),
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(hintText: '012-345 6789'),
           ),
           const SizedBox(height: 20),
           const _Label('Password'),
-          const TextField(
-            obscureText: true,
-            decoration: InputDecoration(hintText: '••••••••'),
+          TextField(
+            controller: _passwordController,
+            obscureText: !_showPassword,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              hintText: '••••••••',
+              suffixIcon: IconButton(
+                tooltip: _showPassword ? 'Hide password' : 'Show password',
+                onPressed: () => setState(() => _showPassword = !_showPassword),
+                icon: Icon(
+                  _showPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           const _Label('Confirm Password'),
-          const TextField(
-            obscureText: true,
-            decoration: InputDecoration(hintText: '••••••••'),
+          TextField(
+            controller: _confirmPasswordController,
+            obscureText: !_showConfirmPassword,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _isLoading ? null : _register(),
+            decoration: InputDecoration(
+              hintText: '••••••••',
+              suffixIcon: IconButton(
+                tooltip: _showConfirmPassword
+                    ? 'Hide confirm password'
+                    : 'Show confirm password',
+                onPressed: () => setState(
+                  () => _showConfirmPassword = !_showConfirmPassword,
+                ),
+                icon: Icon(
+                  _showConfirmPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 40),
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              style: const TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           ElevatedButton(
-            onPressed: () =>
-                Navigator.pushReplacementNamed(context, AppShell.routeName),
-            child: const Text('Register'),
+            onPressed: _isLoading ? null : _register,
+            child: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Register'),
           ),
         ],
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../data/demo_data.dart';
+import 'ridership_service.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -143,82 +144,197 @@ class _AlertDetails extends StatelessWidget {
   }
 }
 
-class _Statistics extends StatelessWidget {
+class _Statistics extends StatefulWidget {
   const _Statistics();
 
   @override
+  State<_Statistics> createState() => _StatisticsState();
+}
+
+class _StatisticsState extends State<_Statistics> {
+  final _ridershipService = RidershipService();
+  late Future<RidershipSnapshot> _snapshotFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotFuture = _ridershipService.fetchLatestSnapshot();
+  }
+
+  void _refresh() {
+    setState(() {
+      _snapshotFuture = _ridershipService.fetchLatestSnapshot();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const AppCard(
-          color: Color(0xFFEFF6FF),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return FutureBuilder<RidershipSnapshot>(
+      future: _snapshotFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return ListView(
+            padding: const EdgeInsets.all(20),
             children: [
-              Text(
-                'Total Ridership',
-                style: TextStyle(
-                  color: AppColors.muted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                '12.8M',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text('+12.5% vs last month'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.6,
-          children: const [
-            _StatCard('MRT', '5.2M', Color(0xFFECFDF5)),
-            _StatCard('LRT', '3.6M', Color(0xFFFFF7ED)),
-            _StatCard('KTM', '2.1M', Color(0xFFF3E8FF)),
-            _StatCard('Bus', 'No data available', Color(0xFFE0F2FE)),
-          ],
-        ),
-        const SizedBox(height: 18),
-        AppCard(
-          child: SizedBox(
-            height: 190,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [80, 112, 96, 126, 145]
-                  .map(
-                    (h) => Container(
-                      width: 24,
-                      height: h.toDouble(),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary2,
-                        borderRadius: BorderRadius.circular(6),
+              AppCard(
+                color: const Color(0xFFFFF1F2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Unable to load ridership data',
+                      style: TextStyle(
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  )
-                  .toList(),
-            ),
+                    const SizedBox(height: 8),
+                    Text(
+                      snapshot.error.toString(),
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        final data = snapshot.requireData;
+
+        return RefreshIndicator(
+          onRefresh: () async => _refresh(),
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              AppCard(
+                color: const Color(0xFFEFF6FF),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Total Ridership',
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatTrips(data.total),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text('Latest official data: ${_formatDate(data.date)}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.6,
+                children: [
+                  _StatCard(
+                    'MRT',
+                    _formatTrips(data.mrt),
+                    const Color(0xFFECFDF5),
+                  ),
+                  _StatCard(
+                    'LRT',
+                    _formatTrips(data.lrt),
+                    const Color(0xFFFFF7ED),
+                  ),
+                  _StatCard(
+                    'KTM',
+                    _formatTrips(data.ktm),
+                    const Color(0xFFF3E8FF),
+                  ),
+                  _StatCard(
+                    'Bus',
+                    _formatTrips(data.bus),
+                    const Color(0xFFE0F2FE),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _RidershipChart(values: data.recentTotals),
+              const SizedBox(height: 12),
+              const Text(
+                'Dataset: Daily Public Transport Ridership • Source: data.gov.my / Ministry of Transport • API: ridership_headline',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            ],
           ),
+        );
+      },
+    );
+  }
+
+  String _formatTrips(int value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}K';
+    }
+    return value.toString();
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+}
+
+class _RidershipChart extends StatelessWidget {
+  const _RidershipChart({required this.values});
+
+  final List<int> values;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = values.isEmpty
+        ? 1
+        : values.reduce((a, b) => a > b ? a : b);
+
+    return AppCard(
+      child: SizedBox(
+        height: 190,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: values.map((value) {
+            final height = 34 + (value / maxValue * 130);
+            return Tooltip(
+              message: value.toString(),
+              child: Container(
+                width: 18,
+                height: height,
+                decoration: BoxDecoration(
+                  color: AppColors.primary2,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            );
+          }).toList(),
         ),
-        const SizedBox(height: 12),
-        const Text(
-          'Dataset: Public transport ridership • Source: data.gov.my / OpenDOSM • Last updated: demo data',
-          style: TextStyle(color: AppColors.muted, fontSize: 12),
-        ),
-      ],
+      ),
     );
   }
 }
