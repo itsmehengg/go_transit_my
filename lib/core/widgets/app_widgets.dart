@@ -16,11 +16,10 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
+    const radius = BorderRadius.all(Radius.circular(16));
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: radius,
         border: Border.all(color: const Color(0xFFE4E8F2)),
         boxShadow: const [
           BoxShadow(
@@ -30,7 +29,12 @@ class AppCard extends StatelessWidget {
           ),
         ],
       ),
-      child: child,
+      child: Material(
+        color: color,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(padding: padding, child: child),
+      ),
     );
   }
 }
