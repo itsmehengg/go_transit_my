@@ -18,6 +18,7 @@ dependencies:
   gtfs_realtime_bindings: ^1.2.0
   archive: ^4.2.0
   shared_preferences: ^2.5.3
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
