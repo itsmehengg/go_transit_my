@@ -9,6 +9,7 @@ class PersonalisationService extends ChangeNotifier {
   static const _darkModeKey = 'module1_dark_mode';
   static const _notificationsKey = 'module1_notifications';
   static const _languageKey = 'module1_language';
+  static const _preferredTransportKey = 'module1_preferred_transport';
   static const _favouriteStationsKey = 'module1_favourite_stations';
   static const _favouriteRoutesKey = 'module1_favourite_routes';
   static const _recentSearchesKey = 'module1_recent_searches';
@@ -18,6 +19,7 @@ class PersonalisationService extends ChangeNotifier {
   bool _darkMode = false;
   bool _notificationsEnabled = true;
   String _language = 'English';
+  String _preferredTransport = 'All';
   List<String> _favouriteStations = <String>[];
   List<String> _favouriteRoutes = <String>[];
   List<String> _recentSearches = <String>[];
@@ -25,6 +27,7 @@ class PersonalisationService extends ChangeNotifier {
   bool get darkMode => _darkMode;
   bool get notificationsEnabled => _notificationsEnabled;
   String get language => _language;
+  String get preferredTransport => _preferredTransport;
   List<String> get favouriteStations => List.unmodifiable(_favouriteStations);
   List<String> get favouriteRoutes => List.unmodifiable(_favouriteRoutes);
   List<String> get recentSearches => List.unmodifiable(_recentSearches);
@@ -35,6 +38,7 @@ class PersonalisationService extends ChangeNotifier {
     _darkMode = _preferences.getBool(_darkModeKey) ?? false;
     _notificationsEnabled = _preferences.getBool(_notificationsKey) ?? true;
     _language = _preferences.getString(_languageKey) ?? 'English';
+    _preferredTransport = _preferences.getString(_preferredTransportKey) ?? 'All';
     _favouriteStations = _preferences.getStringList(_favouriteStationsKey) ?? <String>[];
     _favouriteRoutes = _preferences.getStringList(_favouriteRoutesKey) ?? <String>[];
     _recentSearches = _preferences.getStringList(_recentSearchesKey) ?? <String>[];
@@ -59,9 +63,13 @@ class PersonalisationService extends ChangeNotifier {
     await _preferences.setString(_languageKey, value);
   }
 
-  bool isFavouriteStation(String stationName) {
-    return _favouriteStations.contains(stationName);
+  Future<void> setPreferredTransport(String value) async {
+    _preferredTransport = value;
+    notifyListeners();
+    await _preferences.setString(_preferredTransportKey, value);
   }
+
+  bool isFavouriteStation(String stationName) => _favouriteStations.contains(stationName);
 
   Future<void> toggleFavouriteStation(String stationName) async {
     if (_favouriteStations.contains(stationName)) {
