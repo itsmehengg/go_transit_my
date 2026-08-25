@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
   AuthService({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+      : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -32,6 +32,17 @@ class AuthService {
     );
   }
 
+  Future<void> sendPasswordReset(String email) {
+    return _client.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: 'gotransitmy://reset-password',
+    );
+  }
+
+  Future<UserResponse> updatePassword(String password) {
+    return _client.auth.updateUser(UserAttributes(password: password));
+  }
+
   Future<void> signOut() {
     return _client.auth.signOut();
   }
@@ -46,10 +57,10 @@ class AuthService {
           'Too many email attempts. Wait a few minutes, then try again.',
         'user_already_exists' || 'email_exists' =>
           'This email is already registered. Try logging in instead.',
+        'weak_password' => 'Please choose a stronger password.',
         _ => error.message,
       };
     }
-
     return error.toString();
   }
 }
