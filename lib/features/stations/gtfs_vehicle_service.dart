@@ -45,17 +45,10 @@ class LiveVehicleSnapshot {
 
   final List<VehicleFeedResult> results;
 
-  List<LiveVehicle> get vehicles {
-    return [for (final result in results) ...result.vehicles];
-  }
-
-  int get activeFeedCount {
-    return results.where((result) => result.error == null).length;
-  }
-
-  int get failedFeedCount {
-    return results.where((result) => result.error != null).length;
-  }
+  List<LiveVehicle> get vehicles => [for (final result in results) ...result.vehicles];
+  int get activeFeedCount => results.where((result) => result.error == null).length;
+  int get failedFeedCount => results.where((result) => result.error != null).length;
+  int get totalFeedCount => results.length;
 }
 
 class GtfsVehicleService {
@@ -64,7 +57,12 @@ class GtfsVehicleService {
   final http.Client _client;
 
   Future<LiveVehicleSnapshot> fetchAllVehicles() async {
-    final results = await Future.wait(_feeds.map(_fetchFeed));
+    // The official API is rate-limited, so request the supported feeds in
+    // sequence instead of creating a burst of simultaneous calls.
+    final results = <VehicleFeedResult>[];
+    for (final feed in _feeds) {
+      results.add(await _fetchFeed(feed));
+    }
     return LiveVehicleSnapshot(results: results);
   }
 
@@ -75,7 +73,7 @@ class GtfsVehicleService {
           .timeout(const Duration(seconds: 18));
 
       if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
+        throw Exception('${feed.name} HTTP ${response.statusCode}');
       }
 
       final message = FeedMessage.fromBuffer(response.bodyBytes);
@@ -116,9 +114,7 @@ class GtfsVehicleService {
       bearing: position.hasBearing() ? position.bearing : null,
       speed: position.hasSpeed() ? position.speed : null,
       timestamp: vehicle.hasTimestamp()
-          ? DateTime.fromMillisecondsSinceEpoch(
-              vehicle.timestamp.toInt() * 1000,
-            )
+          ? DateTime.fromMillisecondsSinceEpoch(vehicle.timestamp.toInt() * 1000)
           : null,
     );
   }
@@ -132,6 +128,9 @@ class _GtfsFeed {
   final LiveVehicleType type;
 }
 
+// data.gov.my currently provides vehicle positions only. Rapid Rail realtime
+// is intentionally excluded because the official API documents it as not yet
+// stable. Rail users still receive official scheduled GTFS timetable data.
 final _feeds = [
   _GtfsFeed(
     name: 'KTMB',
@@ -139,13 +138,6 @@ final _feeds = [
       'https://api.data.gov.my/gtfs-realtime/vehicle-position/ktmb',
     ),
     type: LiveVehicleType.rail,
-  ),
-  _GtfsFeed(
-    name: 'Rapid Rail KL',
-    uri: Uri.parse(
-      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-rail-kl',
-    ),
-    type: LiveVehicleType.train,
   ),
   _GtfsFeed(
     name: 'Rapid Bus KL',
@@ -158,20 +150,6 @@ final _feeds = [
     name: 'MRT Feeder Bus',
     uri: Uri.parse(
       'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-mrtfeeder',
-    ),
-    type: LiveVehicleType.bus,
-  ),
-  _GtfsFeed(
-    name: 'Rapid Bus Penang',
-    uri: Uri.parse(
-      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-penang',
-    ),
-    type: LiveVehicleType.bus,
-  ),
-  _GtfsFeed(
-    name: 'Rapid Bus Kuantan',
-    uri: Uri.parse(
-      'https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kuantan',
     ),
     type: LiveVehicleType.bus,
   ),
