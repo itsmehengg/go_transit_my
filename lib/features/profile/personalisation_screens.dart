@@ -179,28 +179,30 @@ class LanguageScreen extends StatelessWidget {
       animation: service,
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: const Text('Language')),
-        body: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            for (final language in languages)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: AppCard(
-                  padding: EdgeInsets.zero,
-                  child: RadioListTile<String>(
-                    value: language,
-                    groupValue: service.language,
-                    onChanged: (value) {
-                      if (value != null) service.setLanguage(value);
-                    },
-                    title: Text(
-                      language,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+        body: RadioGroup<String>(
+          groupValue: service.language,
+          onChanged: (value) {
+            if (value != null) service.setLanguage(value);
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              for (final language in languages)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: AppCard(
+                    padding: EdgeInsets.zero,
+                    child: RadioListTile<String>(
+                      value: language,
+                      title: Text(
+                        language,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -218,39 +220,41 @@ class PreferredTransportScreen extends StatelessWidget {
       animation: service,
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: const Text('Preferred Transport')),
-        body: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const Text(
-              'Choose the transport mode you prefer to see first in journey planning.',
-              style: TextStyle(color: AppColors.muted),
-            ),
-            const SizedBox(height: 16),
-            for (final mode in modes)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: AppCard(
-                  padding: EdgeInsets.zero,
-                  child: RadioListTile<String>(
-                    value: mode,
-                    groupValue: service.preferredTransport,
-                    onChanged: (value) {
-                      if (value != null) service.setPreferredTransport(value);
-                    },
-                    title: Text(
-                      mode,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    secondary: Icon(
-                      mode == 'Bus'
-                          ? Icons.directions_bus_rounded
-                          : Icons.train_rounded,
-                      color: AppColors.primary,
+        body: RadioGroup<String>(
+          groupValue: service.preferredTransport,
+          onChanged: (value) {
+            if (value != null) service.setPreferredTransport(value);
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              const Text(
+                'Choose the transport mode you prefer to see first in journey planning.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+              for (final mode in modes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: AppCard(
+                    padding: EdgeInsets.zero,
+                    child: RadioListTile<String>(
+                      value: mode,
+                      title: Text(
+                        mode,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      secondary: Icon(
+                        mode == 'Bus'
+                            ? Icons.directions_bus_rounded
+                            : Icons.train_rounded,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
