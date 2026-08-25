@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
-import '../../data/demo_data.dart';
 import '../auth/auth_service.dart';
+import '../auth/auth_screens.dart';
+import 'personalisation_screens.dart';
+import 'personalisation_service.dart';
 import 'profile_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,10 +18,13 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _profileService = ProfileService();
+  final _personalisation = PersonalisationService.instance;
+
   Map<String, dynamic>? _profile;
   String? _avatarSignedUrl;
   bool _isLoading = true;
   bool _isUploadingPhoto = false;
+  String? _loadError;
 
   @override
   void initState() {
@@ -28,46 +33,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final profile = await _profileService.getCurrentProfile();
-    final avatarSignedUrl = await _profileService.createAvatarSignedUrl(
-      profile?['avatar_path'] as String?,
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _profile = profile;
-      _avatarSignedUrl = avatarSignedUrl;
-      _isLoading = false;
-    });
+    try {
+      final profile = await _profileService.getCurrentProfile();
+      final avatarSignedUrl = await _profileService.createAvatarSignedUrl(
+        profile?['avatar_path'] as String?,
+      );
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _avatarSignedUrl = avatarSignedUrl;
+        _isLoading = false;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = error.toString();
+      });
+    }
   }
 
   Future<void> _selectAndUploadPhoto() async {
     try {
       final image = await _profileService.pickProfilePhoto();
       if (image == null) return;
-
       setState(() => _isUploadingPhoto = true);
       final avatarPath = await _profileService.uploadProfilePhoto(image);
       final avatarSignedUrl = await _profileService.createAvatarSignedUrl(
         avatarPath,
       );
-
       if (!mounted) return;
       setState(() {
         _profile = {...?_profile, 'avatar_path': avatarPath};
         _avatarSignedUrl = avatarSignedUrl;
         _isUploadingPhoto = false;
       });
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile photo updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _isUploadingPhoto = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
     }
   }
 
@@ -87,20 +97,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             '',
       ),
     );
-
     if (profile == null || !mounted) return;
-
     setState(() => _profile = profile);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile updated')),
+    );
   }
 
   Future<void> _logout() async {
     await _authService.signOut();
     if (!mounted) return;
-
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      LoginScreen.routeName,
+      (_) => false,
+    );
   }
 
   @override
@@ -112,132 +123,222 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'GoTransit User';
     final tier = _profile?['membership_tier'] as String? ?? 'Free User';
 
-    return Scaffold(
-      body: ListView(
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 64, 20, 28),
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-            ),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 34,
-                      backgroundColor: const Color(0xFFDDEBFF),
-                      backgroundImage:
-                          _avatarSignedUrl == null || _avatarSignedUrl!.isEmpty
-                          ? null
-                          : NetworkImage(_avatarSignedUrl!),
-                      child:
-                          _avatarSignedUrl == null || _avatarSignedUrl!.isEmpty
-                          ? const Icon(
-                              Icons.person,
-                              size: 38,
-                              color: AppColors.primary,
-                            )
-                          : null,
+    return AnimatedBuilder(
+      animation: _personalisation,
+      builder: (context, _) => Scaffold(
+        body: ListView(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 64, 20, 28),
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 34,
+                        backgroundColor: const Color(0xFFDDEBFF),
+                        backgroundImage:
+                            _avatarSignedUrl == null || _avatarSignedUrl!.isEmpty
+                                ? null
+                                : NetworkImage(_avatarSignedUrl!),
+                        child:
+                            _avatarSignedUrl == null || _avatarSignedUrl!.isEmpty
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 38,
+                                    color: AppColors.primary,
+                                  )
+                                : null,
+                      ),
+                      Positioned(
+                        right: -8,
+                        bottom: -8,
+                        child: IconButton.filled(
+                          onPressed: _isUploadingPhoto
+                              ? null
+                              : _selectAndUploadPhoto,
+                          icon: _isUploadingPhoto
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.camera_alt_rounded, size: 18),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isLoading ? 'Loading...' : fullName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user?.email ?? tier,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFFDDEBFF)),
+                        ),
+                      ],
                     ),
-                    Positioned(
-                      right: -8,
-                      bottom: -8,
-                      child: IconButton.filled(
-                        onPressed: _isUploadingPhoto
-                            ? null
-                            : _selectAndUploadPhoto,
-                        icon: _isUploadingPhoto
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.camera_alt_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  if (_loadError != null) ...[
+                    AppCard(
+                      color: const Color(0xFFFFF1F2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Profile data could not be loaded',
+                            style: TextStyle(
+                              color: AppColors.danger,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _loadError!,
+                            style: const TextStyle(color: AppColors.muted),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _loadProfile,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Retry'),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 12),
                   ],
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _isLoading ? 'Loading...' : fullName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                  _ProfileRow(
+                    Icons.edit_rounded,
+                    'Edit Profile',
+                    subtitle: _profile?['phone'] as String?,
+                    onTap: _showEditProfileDialog,
+                  ),
+                  _ProfileRow(
+                    Icons.favorite_rounded,
+                    'Favourite Stations',
+                    subtitle: '${_personalisation.favouriteStations.length}',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FavouriteStationsScreen(),
                       ),
                     ),
-                    Text(
-                      tier,
-                      style: const TextStyle(color: Color(0xFFDDEBFF)),
+                  ),
+                  _ProfileRow(
+                    Icons.route_rounded,
+                    'Favourite Routes',
+                    subtitle: '${_personalisation.favouriteRoutes.length}',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FavouriteRoutesScreen(),
+                      ),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  _ProfileRow(
+                    Icons.history_rounded,
+                    'Recent Searches',
+                    subtitle: '${_personalisation.recentSearches.length}',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const RecentSearchesScreen(),
+                      ),
+                    ),
+                  ),
+                  _ProfileRow(
+                    Icons.notifications_rounded,
+                    'Notification Settings',
+                    subtitle: _personalisation.notificationsEnabled ? 'On' : 'Off',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                  _ProfileRow(
+                    Icons.language_rounded,
+                    'Language',
+                    subtitle: _personalisation.language,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LanguageScreen(),
+                      ),
+                    ),
+                  ),
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      secondary: const Icon(
+                        Icons.dark_mode_rounded,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text(
+                        'Dark Mode',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: const Text('Saved on this device'),
+                      value: _personalisation.darkMode,
+                      onChanged: _personalisation.setDarkMode,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProfileRow(
+                    Icons.help_outline_rounded,
+                    'Help & Support',
+                    onTap: () => showAboutDialog(
+                      context: context,
+                      applicationName: 'GoTransit MY',
+                      applicationVersion: '1.0.0',
+                      children: const [
+                        Text(
+                          'Smart Public Transport Tracker using Malaysian open government transport data.',
+                        ),
+                      ],
+                    ),
+                  ),
+                  _ProfileRow(
+                    Icons.logout_rounded,
+                    'Logout',
+                    danger: true,
+                    onTap: _logout,
+                  ),
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                _ProfileRow(
-                  Icons.edit_rounded,
-                  'Edit Profile',
-                  subtitle: _profile?['phone'] as String?,
-                  onTap: _showEditProfileDialog,
-                ),
-                const _ProfileRow(Icons.insights_rounded, 'My Stats'),
-                _ProfileRow(
-                  Icons.favorite_rounded,
-                  'Favourite Stations',
-                  subtitle: stations.length.toString(),
-                ),
-                const _ProfileRow(Icons.route_rounded, 'Favourite Routes'),
-                const _ProfileRow(Icons.history_rounded, 'Recent Searches'),
-                const _ProfileRow(
-                  Icons.notifications_rounded,
-                  'Notification Settings',
-                ),
-                const _ProfileRow(
-                  Icons.language_rounded,
-                  'Language',
-                  subtitle: 'English / Bahasa Melayu',
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(
-                    Icons.dark_mode_rounded,
-                    color: AppColors.primary,
-                  ),
-                  title: const Text(
-                    'Dark Mode',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  subtitle: const Text(
-                    'Stored locally with SharedPreferences later',
-                  ),
-                  value: false,
-                  onChanged: (_) {},
-                ),
-                const Divider(),
-                const _ProfileRow(Icons.help_outline_rounded, 'Help & Support'),
-                _ProfileRow(
-                  Icons.logout_rounded,
-                  'Logout',
-                  danger: true,
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -281,7 +382,6 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   Future<void> _saveProfile() async {
     final fullName = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-
     if (fullName.isEmpty) {
       setState(() => _errorMessage = 'Full name is required.');
       return;
@@ -291,13 +391,11 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
       _isSaving = true;
       _errorMessage = null;
     });
-
     try {
       final profile = await widget.profileService.updateProfile(
         fullName: fullName,
         phone: phone,
       );
-
       if (!mounted) return;
       Navigator.pop(context, profile);
     } catch (error) {
@@ -369,6 +467,7 @@ class _ProfileRow extends StatelessWidget {
     this.danger = false,
     this.onTap,
   });
+
   final IconData icon;
   final String label;
   final String? subtitle;
@@ -378,20 +477,23 @@ class _ProfileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = danger ? AppColors.danger : AppColors.primary;
-    return AppCard(
-      padding: EdgeInsets.zero,
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: danger ? color : null,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: ListTile(
+          leading: Icon(icon, color: color),
+          title: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: danger ? color : null,
+            ),
           ),
+          subtitle: subtitle == null ? null : Text(subtitle!),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onTap,
         ),
-        subtitle: subtitle == null ? null : Text(subtitle!),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: onTap,
       ),
     );
   }
