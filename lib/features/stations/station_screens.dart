@@ -33,7 +33,9 @@ class _NearbyStationsScreenState extends State<NearbyStationsScreen> {
     super.initState();
     _future = _loadData();
     _searchController.addListener(() {
-      if (mounted) setState(() => _query = _searchController.text.trim().toLowerCase());
+      if (mounted) {
+        setState(() => _query = _searchController.text.trim().toLowerCase());
+      }
     });
   }
 
@@ -104,7 +106,11 @@ class _NearbyStationsScreenState extends State<NearbyStationsScreen> {
         title: Text(title, overflow: TextOverflow.ellipsis),
         leading: _view == 0
             ? null
-            : BackButton(onPressed: () => setState(() => _view = _view == 2 && _selectedStation != null ? 1 : 0)),
+            : BackButton(
+                onPressed: () => setState(
+                  () => _view = _view == 2 && _selectedStation != null ? 1 : 0,
+                ),
+              ),
         actions: [
           if (_view == 0)
             IconButton(
@@ -123,6 +129,7 @@ class _NearbyStationsScreenState extends State<NearbyStationsScreen> {
           if (snapshot.hasError) {
             return _ErrorState(error: snapshot.error, onRetry: _refresh);
           }
+
           final data = snapshot.requireData;
           if (_view == 1 && _selectedStation != null) {
             return _StationDetails(
@@ -136,6 +143,7 @@ class _NearbyStationsScreenState extends State<NearbyStationsScreen> {
           if (_view == 2) {
             return _LiveVehicleMap(data: data, station: _selectedStation);
           }
+
           return _StationList(
             data: data,
             query: _query,
@@ -206,9 +214,24 @@ class _StationList extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                StatusChip('${data.staticSnapshot.stops.length} official stops', color: AppColors.primary2),
-                StatusChip('${data.staticSnapshot.routeCount} routes', color: AppColors.primary),
-                StatusChip('${data.vehicleSnapshot.vehicles.length} live vehicles', color: AppColors.success),
+                StatusChip(
+                  '${data.staticSnapshot.stops.length} official stops',
+                  color: AppColors.primary2,
+                ),
+                StatusChip(
+                  '${data.staticSnapshot.routeCount} routes',
+                  color: AppColors.primary,
+                ),
+                StatusChip(
+                  '${data.vehicleSnapshot.vehicles.length} live vehicles',
+                  color: AppColors.success,
+                ),
+                StatusChip(
+                  '${data.vehicleSnapshot.activeFeedCount}/${data.vehicleSnapshot.totalFeedCount} realtime feeds',
+                  color: data.vehicleSnapshot.failedFeedCount == 0
+                      ? AppColors.success
+                      : AppColors.warning,
+                ),
               ],
             ),
           ),
@@ -218,7 +241,10 @@ class _StationList extends StatelessWidget {
               color: const Color(0xFFFFF7ED),
               child: Row(
                 children: [
-                  const Icon(Icons.location_off_rounded, color: AppColors.warning),
+                  const Icon(
+                    Icons.location_off_rounded,
+                    color: AppColors.warning,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -232,26 +258,40 @@ class _StationList extends StatelessWidget {
           if (data.locationError != null) const SizedBox(height: 12),
           TextField(
             controller: searchController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Search official Malaysian stations',
-              prefixIcon: Icon(Icons.search_rounded),
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: searchController.clear,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
             ),
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            children: ['All', 'Prasarana', 'KTMB']
-                .map((item) => ChoiceChip(
-                      label: Text(item),
-                      selected: item == agency,
-                      onSelected: (_) => onAgencyChanged(item),
-                    ))
+            runSpacing: 8,
+            children: ['All', 'Rapid Rail KL', 'Rapid Bus KL', 'KTMB']
+                .map(
+                  (item) => ChoiceChip(
+                    label: Text(item),
+                    selected: item == agency,
+                    onSelected: (_) => onAgencyChanged(item),
+                  ),
+                )
                 .toList(),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: SectionTitle(data.userLocation == null ? 'Stations' : 'Nearest Stations')),
+              Expanded(
+                child: SectionTitle(
+                  data.userLocation == null ? 'Stations' : 'Nearest Stations',
+                ),
+              ),
               TextButton.icon(
                 onPressed: onOpenLiveMap,
                 icon: const Icon(Icons.directions_bus_filled_rounded),
@@ -268,21 +308,28 @@ class _StationList extends StatelessWidget {
           ...filtered.take(60).map((stop) {
             final distance = data.userLocation == null
                 ? null
-                : locationService.distanceMetres(data.userLocation!, stop.point);
+                : locationService.distanceMetres(
+                    data.userLocation!,
+                    stop.point,
+                  );
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: AppCard(
                 padding: EdgeInsets.zero,
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: (stop.agency == 'KTMB' ? const Color(0xFF7C3AED) : AppColors.success)
-                        .withValues(alpha: .12),
+                    backgroundColor: _agencyColor(stop.agency).withValues(alpha: .12),
                     child: Icon(
-                      Icons.train_rounded,
-                      color: stop.agency == 'KTMB' ? const Color(0xFF7C3AED) : AppColors.success,
+                      stop.agency.contains('Bus')
+                          ? Icons.directions_bus_rounded
+                          : Icons.train_rounded,
+                      color: _agencyColor(stop.agency),
                     ),
                   ),
-                  title: Text(stop.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  title: Text(
+                    stop.name,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   subtitle: Text(
                     '${stop.agency}${distance == null ? '' : ' • ${_formatDistance(distance)}'}',
                   ),
@@ -292,10 +339,15 @@ class _StationList extends StatelessWidget {
               ),
             );
           }),
-          const SizedBox(height: 8),
+          if (filtered.length > 60)
+            const Text(
+              'Showing the first 60 results. Search or filter to narrow the list.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          const SizedBox(height: 12),
           const Text(
             'Station, route and scheduled timetable data: official Malaysia GTFS Static (api.data.gov.my). Live markers: official GTFS Realtime vehicle-position feeds. Map tiles: OpenStreetMap.',
-            style: TextStyle(color: AppColors.muted, fontSize: 12),
+            style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4),
           ),
         ],
       ),
@@ -323,7 +375,10 @@ class _StationDetails extends StatelessWidget {
     final personalisation = PersonalisationService.instance;
     final distance = data.userLocation == null
         ? null
-        : locationService.distanceMetres(data.userLocation!, station.point);
+        : locationService.distanceMetres(
+            data.userLocation!,
+            station.point,
+          );
     final nearbyVehicles = [...data.vehicleSnapshot.vehicles]
       ..sort((a, b) {
         final da = locationService.distanceMetres(station.point, a.point);
@@ -342,23 +397,43 @@ class _StationDetails extends StatelessWidget {
               color: const Color(0xFFE6F4FF),
               child: Row(
                 children: [
-                  const TransportIcon(icon: Icons.train_rounded, color: AppColors.primary2, size: 64),
+                  TransportIcon(
+                    icon: station.agency.contains('Bus')
+                        ? Icons.directions_bus_rounded
+                        : Icons.train_rounded,
+                    color: _agencyColor(station.agency),
+                    size: 64,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(station.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                        Text(
+                          station.name,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text('${station.agency} • Stop ${station.rawId}', style: const TextStyle(color: AppColors.muted)),
-                        if (distance != null) Text('${_formatDistance(distance)} from your location'),
+                        Text(
+                          '${station.agency} • Stop ${station.rawId}',
+                          style: const TextStyle(color: AppColors.muted),
+                        ),
+                        if (distance != null)
+                          Text('${_formatDistance(distance)} from your location'),
                       ],
                     ),
                   ),
                   IconButton.filledTonal(
                     tooltip: favourite ? 'Remove favourite' : 'Add favourite',
-                    onPressed: () => personalisation.toggleFavouriteStation(station.name),
-                    icon: Icon(favourite ? Icons.favorite : Icons.favorite_border, color: AppColors.danger),
+                    onPressed: () =>
+                        personalisation.toggleFavouriteStation(station.name),
+                    icon: Icon(
+                      favourite ? Icons.favorite : Icons.favorite_border,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ],
               ),
@@ -374,7 +449,10 @@ class _StationDetails extends StatelessWidget {
                   Text('Longitude: ${station.point.longitude.toStringAsFixed(6)}'),
                   Text('Operator feed: ${station.agency}'),
                   const SizedBox(height: 6),
-                  const Text('Source: Malaysia Government GTFS Static', style: TextStyle(color: AppColors.muted)),
+                  const Text(
+                    'Source: Malaysia Government GTFS Static',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
                 ],
               ),
             ),
@@ -386,23 +464,42 @@ class _StationDetails extends StatelessWidget {
                   Row(
                     children: [
                       const Expanded(child: SectionTitle('Nearest Live Vehicles')),
-                      TextButton(onPressed: onOpenMap, child: const Text('Open Map')),
+                      TextButton(
+                        onPressed: onOpenMap,
+                        child: const Text('Open Map'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   if (nearbyVehicles.isEmpty)
-                    const Text('No realtime vehicle positions are available right now.'),
+                    const Text(
+                      'No realtime vehicle positions are available right now.',
+                    ),
                   ...nearbyVehicles.take(4).map((vehicle) {
-                    final metres = locationService.distanceMetres(station.point, vehicle.point);
+                    final metres = locationService.distanceMetres(
+                      station.point,
+                      vehicle.point,
+                    );
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(
-                        vehicle.type == LiveVehicleType.bus ? Icons.directions_bus_rounded : Icons.train_rounded,
-                        color: AppColors.success,
+                        vehicle.type == LiveVehicleType.bus
+                            ? Icons.directions_bus_rounded
+                            : Icons.train_rounded,
+                        color: _vehicleColor(vehicle.type),
                       ),
-                      title: Text(vehicle.feedName, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text('${vehicle.routeId ?? 'Route unavailable'} • ${_formatDistance(metres)} from station'),
-                      trailing: Text(vehicle.timestamp == null ? 'Live' : _timeAgo(vehicle.timestamp!)),
+                      title: Text(
+                        vehicle.feedName,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        '${vehicle.routeId ?? 'Route unavailable'} • ${_formatDistance(metres)} from station',
+                      ),
+                      trailing: Text(
+                        vehicle.timestamp == null
+                            ? 'Live'
+                            : _timeAgo(vehicle.timestamp!),
+                      ),
                     );
                   }),
                 ],
@@ -410,6 +507,11 @@ class _StationDetails extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _TimetableCard(station: station, service: staticService),
+            const SizedBox(height: 14),
+            const Text(
+              'Important: Malaysia’s official GTFS Realtime API currently provides vehicle positions only. It does not yet provide realtime arrival predictions or service alerts. Scheduled station times are therefore taken from GTFS Static.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4),
+            ),
           ],
         );
       },
@@ -419,6 +521,7 @@ class _StationDetails extends StatelessWidget {
 
 class _TimetableCard extends StatefulWidget {
   const _TimetableCard({required this.station, required this.service});
+
   final StaticGtfsStop station;
   final GtfsStaticService service;
 
@@ -435,13 +538,26 @@ class _TimetableCardState extends State<_TimetableCard> {
     _future = widget.service.fetchDepartures(widget.station);
   }
 
+  void _refresh() {
+    setState(() => _future = widget.service.fetchDepartures(widget.station));
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionTitle('Scheduled Timetable'),
+          Row(
+            children: [
+              const Expanded(child: SectionTitle('Scheduled Timetable')),
+              IconButton(
+                tooltip: 'Refresh timetable',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           FutureBuilder<List<ScheduledDeparture>>(
             future: _future,
@@ -453,27 +569,43 @@ class _TimetableCardState extends State<_TimetableCard> {
                 );
               }
               if (snapshot.hasError) {
-                return Text('Unable to load timetable: ${snapshot.error}', style: const TextStyle(color: AppColors.danger));
+                return Text(
+                  'Unable to load timetable: ${snapshot.error}',
+                  style: const TextStyle(color: AppColors.danger),
+                );
               }
+
               final departures = snapshot.data ?? const <ScheduledDeparture>[];
               if (departures.isEmpty) {
-                return const Text('No upcoming scheduled times were found in the current GTFS feed.');
+                return const Text(
+                  'No upcoming scheduled times were found in the current GTFS feed.',
+                );
               }
+
               return Column(
                 children: departures
-                    .map((departure) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.schedule_rounded, color: AppColors.primary),
-                          title: Text('${departure.time} • ${departure.route}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                          subtitle: Text(departure.destination),
-                        ))
+                    .map(
+                      (departure) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.schedule_rounded,
+                          color: AppColors.primary,
+                        ),
+                        title: Text(
+                          '${departure.time} • ${departure.route}',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(departure.destination),
+                        trailing: const StatusChip('Scheduled'),
+                      ),
+                    )
                     .toList(),
               );
             },
           ),
           const SizedBox(height: 6),
           const Text(
-            'Times are scheduled GTFS data, not a realtime arrival prediction. Realtime data in this app is used only for vehicle positions where available.',
+            'Times are scheduled GTFS data, not realtime arrival predictions.',
             style: TextStyle(color: AppColors.muted, fontSize: 12),
           ),
         ],
@@ -484,17 +616,24 @@ class _TimetableCardState extends State<_TimetableCard> {
 
 class _LiveVehicleMap extends StatelessWidget {
   const _LiveVehicleMap({required this.data, this.station});
+
   final _StationBundle data;
   final StaticGtfsStop? station;
 
   @override
   Widget build(BuildContext context) {
-    final center = station?.point ?? data.userLocation ?? const LatLng(3.1390, 101.6869);
+    final center = station?.point ??
+        data.userLocation ??
+        const LatLng(3.1390, 101.6869);
+
     return Column(
       children: [
         Expanded(
           child: FlutterMap(
-            options: MapOptions(initialCenter: center, initialZoom: station == null ? 11 : 14),
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: station == null ? 11 : 14,
+            ),
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -509,7 +648,11 @@ class _LiveVehicleMap extends StatelessWidget {
                       height: 46,
                       child: const Tooltip(
                         message: 'Your location',
-                        child: Icon(Icons.my_location_rounded, color: AppColors.primary, size: 32),
+                        child: Icon(
+                          Icons.my_location_rounded,
+                          color: AppColors.primary,
+                          size: 32,
+                        ),
                       ),
                     ),
                   if (station != null)
@@ -519,33 +662,44 @@ class _LiveVehicleMap extends StatelessWidget {
                       height: 50,
                       child: Tooltip(
                         message: station!.name,
-                        child: const Icon(Icons.location_on_rounded, color: AppColors.danger, size: 38),
+                        child: const Icon(
+                          Icons.location_on_rounded,
+                          color: AppColors.danger,
+                          size: 38,
+                        ),
                       ),
                     ),
-                  ...data.vehicleSnapshot.vehicles.map((vehicle) => Marker(
-                        point: vehicle.point,
-                        width: 42,
-                        height: 42,
-                        child: Tooltip(
-                          message: '${vehicle.feedName}${vehicle.routeId == null ? '' : ' • ${vehicle.routeId}'}',
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _vehicleColor(vehicle.type),
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: Icon(
-                              vehicle.type == LiveVehicleType.bus ? Icons.directions_bus_filled_rounded : Icons.train_rounded,
-                              color: Colors.white,
-                              size: 21,
-                            ),
+                  ...data.vehicleSnapshot.vehicles.map(
+                    (vehicle) => Marker(
+                      point: vehicle.point,
+                      width: 42,
+                      height: 42,
+                      child: Tooltip(
+                        message:
+                            '${vehicle.feedName}${vehicle.routeId == null ? '' : ' • ${vehicle.routeId}'}${vehicle.timestamp == null ? '' : ' • ${_timeAgo(vehicle.timestamp!)}'}',
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _vehicleColor(vehicle.type),
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: Icon(
+                            vehicle.type == LiveVehicleType.bus
+                                ? Icons.directions_bus_filled_rounded
+                                : Icons.train_rounded,
+                            color: Colors.white,
+                            size: 21,
                           ),
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const RichAttributionWidget(
-                attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+                attributions: [
+                  TextSourceAttribution('OpenStreetMap contributors'),
+                ],
               ),
             ],
           ),
@@ -554,15 +708,25 @@ class _LiveVehicleMap extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: AppCard(
             color: const Color(0xFFEFF6FF),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.sensors_rounded, color: AppColors.success),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '${data.vehicleSnapshot.vehicles.length} current vehicle positions • ${data.vehicleSnapshot.activeFeedCount} feeds active',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.sensors_rounded, color: AppColors.success),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${data.vehicleSnapshot.vehicles.length} current vehicle positions • ${data.vehicleSnapshot.activeFeedCount}/${data.vehicleSnapshot.totalFeedCount} feeds active',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Official vehicle-position data is updated by data.gov.my approximately every 30 seconds. Rapid Rail realtime is not shown because the official feed is documented as not yet stable.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ],
             ),
@@ -574,20 +738,30 @@ class _LiveVehicleMap extends StatelessWidget {
 }
 
 class _StationMap extends StatelessWidget {
-  const _StationMap({required this.stops, required this.vehicles, required this.userLocation});
+  const _StationMap({
+    required this.stops,
+    required this.vehicles,
+    required this.userLocation,
+  });
+
   final List<StaticGtfsStop> stops;
   final List<LiveVehicle> vehicles;
   final LatLng? userLocation;
 
   @override
   Widget build(BuildContext context) {
-    final center = userLocation ?? (stops.isNotEmpty ? stops.first.point : const LatLng(3.1390, 101.6869));
+    final center = userLocation ??
+        (stops.isNotEmpty ? stops.first.point : const LatLng(3.1390, 101.6869));
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: SizedBox(
         height: 270,
         child: FlutterMap(
-          options: MapOptions(initialCenter: center, initialZoom: userLocation == null ? 10.5 : 13),
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: userLocation == null ? 10.5 : 13,
+          ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -600,31 +774,49 @@ class _StationMap extends StatelessWidget {
                     point: userLocation!,
                     width: 44,
                     height: 44,
-                    child: const Icon(Icons.my_location_rounded, color: AppColors.primary, size: 30),
+                    child: const Icon(
+                      Icons.my_location_rounded,
+                      color: AppColors.primary,
+                      size: 30,
+                    ),
                   ),
-                ...stops.map((stop) => Marker(
-                      point: stop.point,
-                      width: 34,
-                      height: 34,
-                      child: Tooltip(
-                        message: stop.name,
-                        child: Icon(Icons.train_rounded, color: stop.agency == 'KTMB' ? const Color(0xFF7C3AED) : AppColors.success, size: 24),
-                      ),
-                    )),
-                ...vehicles.map((vehicle) => Marker(
-                      point: vehicle.point,
-                      width: 34,
-                      height: 34,
+                ...stops.map(
+                  (stop) => Marker(
+                    point: stop.point,
+                    width: 34,
+                    height: 34,
+                    child: Tooltip(
+                      message: '${stop.name} • ${stop.agency}',
                       child: Icon(
-                        vehicle.type == LiveVehicleType.bus ? Icons.directions_bus_filled_rounded : Icons.train_rounded,
-                        color: _vehicleColor(vehicle.type),
-                        size: 22,
+                        stop.agency.contains('Bus')
+                            ? Icons.directions_bus_rounded
+                            : Icons.train_rounded,
+                        color: _agencyColor(stop.agency),
+                        size: 24,
                       ),
-                    )),
+                    ),
+                  ),
+                ),
+                ...vehicles.map(
+                  (vehicle) => Marker(
+                    point: vehicle.point,
+                    width: 34,
+                    height: 34,
+                    child: Icon(
+                      vehicle.type == LiveVehicleType.bus
+                          ? Icons.directions_bus_filled_rounded
+                          : Icons.train_rounded,
+                      color: _vehicleColor(vehicle.type),
+                      size: 22,
+                    ),
+                  ),
+                ),
               ],
             ),
             const RichAttributionWidget(
-              attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+              attributions: [
+                TextSourceAttribution('OpenStreetMap contributors'),
+              ],
             ),
           ],
         ),
@@ -635,6 +827,7 @@ class _StationMap extends StatelessWidget {
 
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.error, required this.onRetry});
+
   final Object? error;
   final Future<void> Function() onRetry;
 
@@ -648,13 +841,24 @@ class _ErrorState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cloud_off_rounded, size: 48, color: AppColors.danger),
+              const Icon(
+                Icons.cloud_off_rounded,
+                size: 48,
+                color: AppColors.danger,
+              ),
               const SizedBox(height: 12),
-              const Text('Unable to load transport data', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const Text(
+                'Unable to load transport data',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
               const SizedBox(height: 8),
               Text('$error', textAlign: TextAlign.center),
               const SizedBox(height: 14),
-              ElevatedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry')),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
             ],
           ),
         ),
@@ -677,6 +881,12 @@ class _StationBundle {
   final List<StaticGtfsStop> stops;
   final LatLng? userLocation;
   final Object? locationError;
+}
+
+Color _agencyColor(String agency) {
+  if (agency == 'KTMB') return const Color(0xFF7C3AED);
+  if (agency.contains('Bus')) return const Color(0xFF0EA5E9);
+  return AppColors.success;
 }
 
 Color _vehicleColor(LiveVehicleType type) {
