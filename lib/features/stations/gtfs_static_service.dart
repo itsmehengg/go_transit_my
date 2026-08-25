@@ -64,7 +64,12 @@ class GtfsStaticService {
   final Map<String, Archive> _archiveCache = {};
 
   Future<StaticGtfsSnapshot> fetchAllStatic() async {
-    final results = await Future.wait(_feeds.map(_fetchFeed));
+    // Keep the number of official feeds deliberately small so the app stays
+    // within data.gov.my rate limits and loads reliably on student devices.
+    final results = <StaticGtfsFeedResult>[];
+    for (final feed in _feeds) {
+      results.add(await _fetchFeed(feed));
+    }
     return StaticGtfsSnapshot(results: results);
   }
 
@@ -81,13 +86,15 @@ class GtfsStaticService {
       return const [];
     }
 
-    final trips = {
+    final trips = <String, Map<String, String>>{
       for (final row in _parseCsv(_text(tripsFile)))
-        if ((row['trip_id'] ?? '').isNotEmpty) row['trip_id']!: row,
+        if ((row['trip_id'] ?? '').trim().isNotEmpty)
+          (row['trip_id'] ?? '').trim(): row,
     };
-    final routes = {
+    final routes = <String, Map<String, String>>{
       for (final row in _parseCsv(_text(routesFile)))
-        if ((row['route_id'] ?? '').isNotEmpty) row['route_id']!: row,
+        if ((row['route_id'] ?? '').trim().isNotEmpty)
+          (row['route_id'] ?? '').trim(): row,
     };
 
     final now = DateTime.now();
@@ -109,7 +116,7 @@ class GtfsStaticService {
       departures.add((
         seconds: seconds,
         value: ScheduledDeparture(
-          time: time,
+          time: _normaliseDisplayTime(time),
           route: shortName.isNotEmpty
               ? shortName
               : longName.isNotEmpty
@@ -129,9 +136,15 @@ class GtfsStaticService {
       final archive = await _loadArchive(feed);
       final stopsFile = _findFile(archive, 'stops.txt');
       final routesFile = _findFile(archive, 'routes.txt');
-      final stops = stopsFile == null ? <StaticGtfsStop>[] : _parseStops(_text(stopsFile), feed.name);
+      final stops = stopsFile == null
+          ? <StaticGtfsStop>[]
+          : _parseStops(_text(stopsFile), feed.name);
       final routeCount = routesFile == null ? 0 : _parseCsv(_text(routesFile)).length;
-      return StaticGtfsFeedResult(agency: feed.name, stops: stops, routeCount: routeCount);
+      return StaticGtfsFeedResult(
+        agency: feed.name,
+        stops: stops,
+        routeCount: routeCount,
+      );
     } catch (error) {
       return StaticGtfsFeedResult(
         agency: feed.name,
@@ -145,8 +158,14 @@ class GtfsStaticService {
   Future<Archive> _loadArchive(_GtfsStaticFeed feed) async {
     final cached = _archiveCache[feed.name];
     if (cached != null) return cached;
-    final response = await _client.get(feed.uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) throw Exception('${feed.name} GTFS HTTP ${response.statusCode}');
+
+    final response = await _client
+        .get(feed.uri)
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception('${feed.name} GTFS HTTP ${response.statusCode}');
+    }
+
     final archive = ZipDecoder().decodeBytes(response.bodyBytes);
     _archiveCache[feed.name] = archive;
     return archive;
@@ -167,7 +186,14 @@ class GtfsStaticService {
       final name = row['stop_name']?.trim();
       final lat = double.tryParse(row['stop_lat']?.trim() ?? '');
       final lon = double.tryParse(row['stop_lon']?.trim() ?? '');
-      if (rawId == null || rawId.isEmpty || name == null || name.isEmpty || lat == null || lon == null) {
+      if (rawId == null ||
+          rawId.isEmpty ||
+          name == null ||
+          name.isEmpty ||
+          lat == null ||
+          lon == null ||
+          lat == 0 ||
+          lon == 0) {
         return null;
       }
       return StaticGtfsStop(
@@ -190,9 +216,25 @@ class GtfsStaticService {
     return h * 3600 + m * 60 + s;
   }
 
+  String _normaliseDisplayTime(String value) {
+    final parts = value.split(':');
+    if (parts.length < 2) return value;
+    final rawHour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (rawHour == null || minute == null) return value;
+    final hour24 = rawHour % 24;
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+    return '$hour12:${minute.toString().padLeft(2, '0')} $period';
+  }
+
   List<Map<String, String>> _parseCsv(String content) {
-    final lines = const LineSplitter().convert(content).where((line) => line.trim().isNotEmpty).toList();
+    final lines = const LineSplitter()
+        .convert(content)
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return const [];
+
     final headers = _parseCsvLine(lines.first);
     final rows = <Map<String, String>>[];
     for (final line in lines.skip(1)) {
@@ -210,6 +252,7 @@ class GtfsStaticService {
     final values = <String>[];
     final buffer = StringBuffer();
     var inQuotes = false;
+
     for (var i = 0; i < line.length; i++) {
       final char = line[i];
       if (char == '"') {
@@ -227,6 +270,7 @@ class GtfsStaticService {
         buffer.write(char);
       }
     }
+
     values.add(buffer.toString());
     return values;
   }
@@ -234,11 +278,26 @@ class GtfsStaticService {
 
 class _GtfsStaticFeed {
   const _GtfsStaticFeed({required this.name, required this.uri});
+
   final String name;
   final Uri uri;
 }
 
 final _feeds = [
-  _GtfsStaticFeed(name: 'KTMB', uri: Uri.parse('https://api.data.gov.my/gtfs-static/ktmb')),
-  _GtfsStaticFeed(name: 'Prasarana', uri: Uri.parse('https://api.data.gov.my/gtfs-static/prasarana')),
+  _GtfsStaticFeed(
+    name: 'KTMB',
+    uri: Uri.parse('https://api.data.gov.my/gtfs-static/ktmb'),
+  ),
+  _GtfsStaticFeed(
+    name: 'Rapid Rail KL',
+    uri: Uri.parse(
+      'https://api.data.gov.my/gtfs-static/prasarana?category=rapid-rail-kl',
+    ),
+  ),
+  _GtfsStaticFeed(
+    name: 'Rapid Bus KL',
+    uri: Uri.parse(
+      'https://api.data.gov.my/gtfs-static/prasarana?category=rapid-bus-kl',
+    ),
+  ),
 ];
