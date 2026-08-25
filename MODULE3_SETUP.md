@@ -2,22 +2,26 @@
 
 ## Implemented functions
 
-- Official Malaysia GTFS Static station loading from `api.data.gov.my` for Prasarana and KTMB
+- Official Malaysia GTFS Static station loading from `api.data.gov.my`
+- Supported static feeds: KTMB, Rapid Rail KL and Rapid Bus KL
 - Search stations by station/operator name
-- Filter Prasarana / KTMB
+- Filter All / Rapid Rail KL / Rapid Bus KL / KTMB
 - Android GPS permission and current-location detection
 - Nearby-station ordering and distance calculation
-- OpenStreetMap station map
+- OpenStreetMap station map with current-location marker
 - Official Malaysia GTFS Realtime vehicle-position loading
-- Live bus/train/rail markers with feed/route information
-- Station details with operator, stop ID, coordinates and distance
+- Supported realtime feeds: KTMB, Rapid Bus KL and MRT Feeder Bus
+- Live bus/train/rail markers with feed, route and update-time information where available
+- Dynamic station details with operator, stop ID, coordinates and distance
 - Favourite station toggle integrated with Module 1 personalisation storage
 - Scheduled GTFS timetable for the selected stop
-- Loading, refresh, empty and error states
+- Loading, pull-to-refresh, empty and error states
 
 ## Important data wording
 
-The Malaysia GTFS Realtime integration in this module is used for **vehicle positions**. The timetable shown in Station Details comes from **GTFS Static scheduled stop times**. The UI intentionally does not claim that scheduled times are realtime arrival predictions.
+Malaysia's official GTFS Realtime API currently provides **vehicle positions only**. It does not currently provide realtime arrival predictions, trip updates, or service alerts. For that reason, the timetable shown in Station Details comes from **GTFS Static scheduled stop times** and is clearly labelled `Scheduled`.
+
+Rapid Rail realtime vehicle positions are intentionally not displayed because the official API currently documents that feed as not yet stable. Rapid Rail stations and scheduled timetable information still come from the official GTFS Static feed.
 
 ## Android test steps
 
@@ -27,6 +31,7 @@ git checkout feature/module3-complete
 git pull origin feature/module3-complete
 flutter clean
 flutter pub get
+flutter analyze
 flutter run
 ```
 
@@ -37,11 +42,12 @@ Test these flows:
 1. Open Stations and allow location permission.
 2. Confirm official stations load and nearest stations show a distance.
 3. Search `KL Sentral`, `Bukit Bintang`, or another known station.
-4. Switch between All / Prasarana / KTMB filters.
-5. Open a station and toggle Favourite.
-6. Return to Profile > Favourite Stations and confirm it is saved.
+4. Switch between All / Rapid Rail KL / Rapid Bus KL / KTMB filters.
+5. Open a station and confirm its real GTFS stop name, operator, stop ID and coordinates are shown.
+6. Toggle Favourite, then return to Profile > Favourite Stations and confirm it is saved.
 7. Open a station and wait for Scheduled Timetable to load.
-8. Tap Live Map and confirm current GTFS Realtime vehicle markers appear when feeds are available.
+8. Open Live Map and confirm current GTFS Realtime vehicle markers appear when feeds are available.
 9. Pull to refresh and verify the page reloads without crashing.
+10. Deny location permission once and confirm the module still loads stations alphabetically instead of crashing.
 
-If an emulator does not have a GPS location configured, the app remains runnable and shows stations alphabetically with a clear GPS warning instead of crashing.
+If an emulator has no GPS location configured, the module remains usable and shows a clear GPS warning.
