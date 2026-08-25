@@ -158,7 +158,7 @@ class NotificationSettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'This preference is stored on this device. Android notification permission will be requested when push notifications are connected.',
+              'This preference is saved on this device.',
               style: TextStyle(color: AppColors.muted),
             ),
           ],
@@ -200,11 +200,56 @@ class LanguageScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PreferredTransportScreen extends StatelessWidget {
+  const PreferredTransportScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final service = PersonalisationService.instance;
+    const modes = ['All', 'MRT', 'LRT', 'Bus', 'KTM'];
+    return AnimatedBuilder(
+      animation: service,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(title: const Text('Preferred Transport')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
             const Text(
-              'The selected language preference is saved now. Full text translation can be expanded later with Flutter localisation files.',
+              'Choose the transport mode you prefer to see first in journey planning.',
               style: TextStyle(color: AppColors.muted),
             ),
+            const SizedBox(height: 16),
+            for (final mode in modes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: AppCard(
+                  padding: EdgeInsets.zero,
+                  child: RadioListTile<String>(
+                    value: mode,
+                    groupValue: service.preferredTransport,
+                    onChanged: (value) {
+                      if (value != null) service.setPreferredTransport(value);
+                    },
+                    title: Text(
+                      mode,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    secondary: Icon(
+                      mode == 'Bus'
+                          ? Icons.directions_bus_rounded
+                          : Icons.train_rounded,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
