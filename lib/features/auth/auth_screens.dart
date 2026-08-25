@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
-import 'auth_service.dart';
 import '../shell/app_shell.dart';
+import 'auth_service.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -46,11 +46,6 @@ class SplashScreen extends StatelessWidget {
                   style: TextStyle(color: Color(0xFFDDEBFF)),
                 ),
                 const Spacer(),
-                const LinearProgressIndicator(
-                  color: Colors.white,
-                  backgroundColor: Color(0x557DB7FF),
-                ),
-                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => Navigator.pushReplacementNamed(
                     context,
@@ -104,47 +99,20 @@ class OnboardingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Real-time public transport made easy for everyone across Malaysia.',
+                'Public transport information made easier for travel across Malaysia.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.muted, fontSize: 15),
               ),
               const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  4,
-                  (i) => Container(
-                    width: i == 0 ? 22 : 8,
-                    height: 8,
-                    margin: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: i == 0 ? AppColors.primary : AppColors.line,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pushReplacementNamed(
+                    context,
+                    LoginScreen.routeName,
                   ),
+                  child: const Text('Continue'),
                 ),
-              ),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pushReplacementNamed(
-                      context,
-                      LoginScreen.routeName,
-                    ),
-                    child: const Text('Skip'),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 120,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pushReplacementNamed(
-                        context,
-                        LoginScreen.routeName,
-                      ),
-                      child: const Text('Next'),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -180,7 +148,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-
     if (email.isEmpty || password.isEmpty) {
       setState(() => _errorMessage = 'Enter your email and password.');
       return;
@@ -190,18 +157,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
-
     try {
       await _authService.signIn(email: email, password: password);
-
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppShell.routeName);
     } catch (error) {
+      if (!mounted) return;
       setState(() => _errorMessage = _authService.readableAuthError(error));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -230,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text(
                     'Login to continue',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF434654), fontSize: 14),
+                    style: TextStyle(color: AppColors.muted),
                   ),
                   const SizedBox(height: 40),
                   const _Label('Email'),
@@ -252,11 +216,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: InputDecoration(
                       hintText: '••••••••',
                       suffixIcon: IconButton(
-                        tooltip: _showPassword
-                            ? 'Hide password'
-                            : 'Show password',
-                        onPressed: () =>
-                            setState(() => _showPassword = !_showPassword),
+                        onPressed: () => setState(
+                          () => _showPassword = !_showPassword,
+                        ),
                         icon: Icon(
                           _showPassword
                               ? Icons.visibility_outlined
@@ -268,11 +230,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        ForgotPasswordScreen.routeName,
+                      ),
                       child: const Text('Forgot Password?'),
                     ),
                   ),
-                  const SizedBox(height: 12),
                   if (_errorMessage != null) ...[
                     Text(
                       _errorMessage!,
@@ -293,33 +257,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                         : const Text('Login'),
                   ),
-                  const SizedBox(height: 36),
-                  const Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('or continue with'),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.g_mobiledata_rounded),
-                    label: const Text('Google'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.facebook_rounded),
-                    label: const Text('Facebook'),
-                  ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 28),
                   TextButton(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, RegisterScreen.routeName),
+                    onPressed: () => Navigator.pushNamed(
+                      context,
+                      RegisterScreen.routeName,
+                    ),
                     child: const Text("Don't have an account? Register"),
                   ),
                 ],
@@ -373,12 +316,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _errorMessage = 'Enter your name, email, and password.');
       return;
     }
-
     if (password.length < 6) {
       setState(() => _errorMessage = 'Password must be at least 6 characters.');
       return;
     }
-
     if (password != confirmPassword) {
       setState(() => _errorMessage = 'Passwords do not match.');
       return;
@@ -388,7 +329,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
-
     try {
       final response = await _authService.signUp(
         fullName: fullName,
@@ -396,9 +336,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: phone,
         password: password,
       );
-
       if (!mounted) return;
-
       if (response.session == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -410,35 +348,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Navigator.pushReplacementNamed(context, AppShell.routeName);
       }
     } catch (error) {
+      if (!mounted) return;
       setState(() => _errorMessage = _authService.readableAuthError(error));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const BackButton()),
+      appBar: AppBar(title: const Text('Create Account')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text(
-            'Create Account',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-          ),
-          const Text(
-            'Sign up to get started',
-            style: TextStyle(color: AppColors.muted),
-          ),
-          const SizedBox(height: 28),
           const _Label('Full Name'),
           TextField(
             controller: _fullNameController,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(),
           ),
           const SizedBox(height: 20),
           const _Label('Email'),
@@ -446,7 +373,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(),
           ),
           const SizedBox(height: 20),
           const _Label('Phone Number'),
@@ -463,10 +389,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
             obscureText: !_showPassword,
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
-              hintText: '••••••••',
+              hintText: 'Minimum 6 characters',
               suffixIcon: IconButton(
-                tooltip: _showPassword ? 'Hide password' : 'Show password',
-                onPressed: () => setState(() => _showPassword = !_showPassword),
+                onPressed: () => setState(
+                  () => _showPassword = !_showPassword,
+                ),
                 icon: Icon(
                   _showPassword
                       ? Icons.visibility_outlined
@@ -483,11 +410,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _isLoading ? null : _register(),
             decoration: InputDecoration(
-              hintText: '••••••••',
+              hintText: 'Repeat password',
               suffixIcon: IconButton(
-                tooltip: _showConfirmPassword
-                    ? 'Hide confirm password'
-                    : 'Show confirm password',
                 onPressed: () => setState(
                   () => _showConfirmPassword = !_showConfirmPassword,
                 ),
@@ -499,7 +423,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
           if (_errorMessage != null) ...[
             Text(
               _errorMessage!,
@@ -519,6 +443,241 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Text('Register'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({super.key});
+  static const routeName = '/forgot-password';
+
+  @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _authService = AuthService();
+  final _emailController = TextEditingController();
+  bool _isLoading = false;
+  String? _message;
+  bool _success = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _success = false;
+        _message = 'Enter a valid email address.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _message = null;
+    });
+    try {
+      await _authService.sendPasswordReset(email);
+      if (!mounted) return;
+      setState(() {
+        _success = true;
+        _message = 'Reset email sent. Open the link in your email to continue in GoTransit MY.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _success = false;
+        _message = _authService.readableAuthError(error);
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Forgot Password')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 24),
+          const Icon(Icons.lock_reset_rounded, size: 72, color: AppColors.primary),
+          const SizedBox(height: 24),
+          const Text(
+            'Reset your password',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'We will send a secure recovery link to your registered email.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.muted),
+          ),
+          const SizedBox(height: 30),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _isLoading ? null : _sendReset(),
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              hintText: 'youremail@gmail.com',
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_message != null) ...[
+            Text(
+              _message!,
+              style: TextStyle(
+                color: _success ? AppColors.success : AppColors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          ElevatedButton(
+            onPressed: _isLoading ? null : _sendReset,
+            child: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ResetPasswordScreen extends StatefulWidget {
+  const ResetPasswordScreen({super.key});
+  static const routeName = '/reset-password';
+
+  @override
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+}
+
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+  final _authService = AuthService();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _isLoading = false;
+  bool _showPassword = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _savePassword() async {
+    final password = _passwordController.text;
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      return;
+    }
+    if (password != _confirmController.text) {
+      setState(() => _errorMessage = 'Passwords do not match.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await _authService.updatePassword(password);
+      await _authService.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated. Please log in again.')),
+      );
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        LoginScreen.routeName,
+        (_) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMessage = _authService.readableAuthError(error));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create New Password')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 24),
+          const Text(
+            'Enter a new password for your account.',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _passwordController,
+            obscureText: !_showPassword,
+            decoration: InputDecoration(
+              labelText: 'New Password',
+              suffixIcon: IconButton(
+                onPressed: () => setState(
+                  () => _showPassword = !_showPassword,
+                ),
+                icon: Icon(
+                  _showPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _confirmController,
+            obscureText: !_showPassword,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _isLoading ? null : _savePassword(),
+            decoration: const InputDecoration(labelText: 'Confirm Password'),
+          ),
+          const SizedBox(height: 18),
+          if (_errorMessage != null) ...[
+            Text(
+              _errorMessage!,
+              style: const TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          ElevatedButton(
+            onPressed: _isLoading ? null : _savePassword,
+            child: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Update Password'),
           ),
         ],
       ),
