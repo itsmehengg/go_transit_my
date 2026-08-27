@@ -5,32 +5,37 @@ import '../../core/theme/app_theme.dart';
 class AppCard extends StatelessWidget {
   const AppCard({
     required this.child,
-    this.color = Colors.white,
+    this.color,
     this.padding = const EdgeInsets.all(16),
     super.key,
   });
 
   final Widget child;
-  final Color color;
+  final Color? color;
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(16));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = color ?? Theme.of(context).cardColor;
+    final borderColor = isDark ? AppColors.darkLine : const Color(0xFFE4E8F2);
+    final shadowColor = isDark ? const Color(0x33000000) : const Color(0x140B1220);
+
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
-        border: Border.all(color: const Color(0xFFE4E8F2)),
-        boxShadow: const [
+        border: Border.all(color: borderColor),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x140B1220),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+            color: shadowColor,
+            blurRadius: isDark ? 10 : 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Material(
-        color: color,
+        color: cardColor,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
         child: Padding(padding: padding, child: child),
@@ -49,7 +54,7 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
+        color: color.withValues(alpha: .14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -97,6 +102,7 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
         Expanded(
@@ -108,8 +114,8 @@ class SectionTitle extends StatelessWidget {
         if (trailing != null)
           Text(
             trailing!,
-            style: const TextStyle(
-              color: AppColors.primary,
+            style: TextStyle(
+              color: isDark ? const Color(0xFF8BB8FF) : AppColors.primary,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
