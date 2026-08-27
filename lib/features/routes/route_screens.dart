@@ -20,14 +20,45 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   RouteStation? toStation;
   DateTime departureTime = DateTime.now();
   String selectedTransport = 'All';
+  late final PersonalisationService _personalisation;
+  String _lastProfileTransport = 'All';
+  bool _transportChangedForJourney = false;
 
   @override
   void initState() {
     super.initState();
-    final preferred = PersonalisationService.instance.preferredTransport;
-    if (const ['All', 'MRT', 'LRT', 'Bus', 'KTM'].contains(preferred)) {
+    _personalisation = PersonalisationService.instance;
+    _lastProfileTransport = _validTransport(_personalisation.preferredTransport);
+    selectedTransport = _lastProfileTransport;
+    _personalisation.addListener(_onPersonalisationChanged);
+  }
+
+  @override
+  void dispose() {
+    _personalisation.removeListener(_onPersonalisationChanged);
+    super.dispose();
+  }
+
+  String _validTransport(String value) {
+    return const ['All', 'MRT', 'LRT', 'Bus', 'KTM'].contains(value) ? value : 'All';
+  }
+
+  void _onPersonalisationChanged() {
+    final preferred = _validTransport(_personalisation.preferredTransport);
+    if (preferred == _lastProfileTransport) return;
+    _lastProfileTransport = preferred;
+    if (!mounted) return;
+    setState(() {
       selectedTransport = preferred;
-    }
+      _transportChangedForJourney = false;
+    });
+  }
+
+  void _changeTransport(String value) {
+    setState(() {
+      selectedTransport = value;
+      _transportChangedForJourney = value != _lastProfileTransport;
+    });
   }
 
   Future<void> _pickStation(bool isFrom) async {
@@ -119,13 +150,15 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
               toStation: toStation,
               departureTime: departureTime,
               selectedTransport: selectedTransport,
+              profileTransport: _lastProfileTransport,
+              transportChangedForJourney: _transportChangedForJourney,
               onPickFrom: () => _pickStation(true),
               onPickTo: () => _pickStation(false),
               onClearFrom: fromStation == null ? null : () => setState(() => fromStation = null),
               onClearTo: toStation == null ? null : () => setState(() => toStation = null),
               onSwap: _swapStations,
               onPickDepartureTime: _pickDepartureTime,
-              onTransportChanged: (value) => setState(() => selectedTransport = value),
+              onTransportChanged: _changeTransport,
             ),
             const SizedBox(height: 28),
             ElevatedButton(onPressed: _findRoute, child: const Text('Find Route')),
@@ -253,6 +286,8 @@ class _PlannerForm extends StatelessWidget {
     required this.toStation,
     required this.departureTime,
     required this.selectedTransport,
+    required this.profileTransport,
+    required this.transportChangedForJourney,
     required this.onPickFrom,
     required this.onPickTo,
     required this.onClearFrom,
@@ -266,6 +301,8 @@ class _PlannerForm extends StatelessWidget {
   final RouteStation? toStation;
   final DateTime departureTime;
   final String selectedTransport;
+  final String profileTransport;
+  final bool transportChangedForJourney;
   final VoidCallback onPickFrom;
   final VoidCallback onPickTo;
   final VoidCallback? onClearFrom;
@@ -339,10 +376,12 @@ class _PlannerForm extends StatelessWidget {
                 )
                 .toList(),
           ),
-          if (PersonalisationService.instance.preferredTransport != 'All') ...[
+          if (profileTransport != 'All') ...[
             const SizedBox(height: 10),
             Text(
-              'Preferred transport from Profile: ${PersonalisationService.instance.preferredTransport}',
+              transportChangedForJourney
+                  ? 'Profile preference: $profileTransport • This journey: $selectedTransport'
+                  : 'Using preferred transport from Profile: $profileTransport',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -512,15 +551,18 @@ String _formatDeparture(DateTime date) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final selectedDay = DateTime(date.year, date.month, date.day);
-  final dayText = selectedDay == today
-      ? 'Today'
-      : selectedDay == today.add(const Duration(days: 1))
-          ? 'Tomorrow'
-          : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  String day;
+  if (selectedDay == today) {
+    day = 'Today';
+  } else if (selectedDay == today.add(const Duration(days: 1))) {
+    day = 'Tomorrow';
+  } else {
+    day = '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+  final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
   final minute = date.minute.toString().padLeft(2, '0');
   final period = date.hour >= 12 ? 'PM' : 'AM';
-  return '$dayText, $hour:$minute $period';
+  return '$day, $hour:$minute $period';
 }
 
 class _SortTabs extends StatelessWidget {
