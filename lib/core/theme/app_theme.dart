@@ -10,6 +10,12 @@ class AppColors {
   static const text = Color(0xFF191B23);
   static const muted = Color(0xFF6B7280);
   static const line = Color(0xFFC3C5D7);
+  static const darkBackground = Color(0xFF0B1220);
+  static const darkSurface = Color(0xFF151F2E);
+  static const darkSurfaceHigh = Color(0xFF1D2A3B);
+  static const darkText = Color(0xFFF8FAFC);
+  static const darkMuted = Color(0xFFCBD5E1);
+  static const darkLine = Color(0xFF41516A);
 }
 
 class AppTheme {
@@ -26,6 +32,11 @@ class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.surfaceTint,
       fontFamily: 'Inter',
+      textTheme: ThemeData.light().textTheme.apply(
+        bodyColor: AppColors.text,
+        displayColor: AppColors.text,
+      ),
+      iconTheme: const IconThemeData(color: AppColors.text),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
@@ -35,6 +46,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF3F3FE),
+        labelStyle: const TextStyle(color: AppColors.muted),
+        hintStyle: const TextStyle(color: AppColors.muted),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 17,
           vertical: 18,
@@ -62,19 +75,139 @@ class AppTheme {
           elevation: 3,
         ),
       ),
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        indicatorColor: Color(0xFFE6EEFF),
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(color: AppColors.text, fontWeight: FontWeight.w700),
+        ),
+        iconTheme: WidgetStatePropertyAll(IconThemeData(color: AppColors.text)),
+      ),
+      dividerColor: AppColors.line,
     );
   }
 
   static ThemeData dark() {
-    final theme = light();
-    return theme.copyWith(
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF5B9DFF),
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF101827),
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primary2,
-        brightness: Brightness.dark,
+      primary: const Color(0xFF79AFFF),
+      surface: AppColors.darkSurface,
+      onSurface: AppColors.darkText,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: AppColors.darkBackground,
+      canvasColor: AppColors.darkBackground,
+      cardColor: AppColors.darkSurface,
+      dividerColor: AppColors.darkLine,
+      fontFamily: 'Inter',
+      textTheme: ThemeData.dark().textTheme.apply(
+        bodyColor: AppColors.darkText,
+        displayColor: AppColors.darkText,
       ),
-      cardColor: const Color(0xFF162235),
+      iconTheme: const IconThemeData(color: AppColors.darkText),
+      appBarTheme: const AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: AppColors.darkBackground,
+        foregroundColor: AppColors.darkText,
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: AppColors.darkText,
+        iconColor: AppColors.darkText,
+        subtitleTextStyle: TextStyle(color: AppColors.darkMuted),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.darkSurfaceHigh,
+        labelStyle: const TextStyle(color: AppColors.darkMuted),
+        hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        prefixIconColor: AppColors.darkMuted,
+        suffixIconColor: AppColors.darkMuted,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 17,
+          vertical: 18,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.darkLine),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.darkLine),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF79AFFF), width: 1.6),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          shape: const StadiumBorder(),
+          backgroundColor: const Color(0xFF2F6FE4),
+          foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          elevation: 2,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.darkText,
+          side: const BorderSide(color: AppColors.darkLine),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: const Color(0xFF8BB8FF)),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? Colors.white
+              : const Color(0xFFCBD5E1);
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? const Color(0xFF2F6FE4)
+              : const Color(0xFF475569);
+        }),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: const Color(0xFF111A28),
+        indicatorColor: const Color(0xFF254C85),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          return TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? Colors.white
+                : AppColors.darkMuted,
+            fontWeight: FontWeight.w700,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          return IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? Colors.white
+                : AppColors.darkMuted,
+          );
+        }),
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.darkSurface,
+        titleTextStyle: TextStyle(
+          color: AppColors.darkText,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+        contentTextStyle: TextStyle(color: AppColors.darkMuted),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFF243244),
+        contentTextStyle: TextStyle(color: Colors.white),
+      ),
     );
   }
 }
