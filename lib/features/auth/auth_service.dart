@@ -28,6 +28,7 @@ class AuthService {
     return _client.auth.signUp(
       email: email.trim(),
       password: password,
+      emailRedirectTo: 'gotransitmy://login',
       data: {'full_name': fullName.trim(), 'phone': phone.trim()},
     );
   }
