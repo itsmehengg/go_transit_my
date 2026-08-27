@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
 import '../../data/demo_data.dart';
+import '../profile/personalisation_service.dart';
 import 'ridership_service.dart';
 import 'station_catalog.dart';
 
@@ -17,6 +18,17 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   bool showResults = false;
   RouteStation? fromStation;
   RouteStation? toStation;
+  DateTime departureTime = DateTime.now();
+  String selectedTransport = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    final preferred = PersonalisationService.instance.preferredTransport;
+    if (const ['All', 'MRT', 'LRT', 'Bus', 'KTM'].contains(preferred)) {
+      selectedTransport = preferred;
+    }
+  }
 
   Future<void> _pickStation(bool isFrom) async {
     final station = await Navigator.of(context).push<RouteStation>(
@@ -35,6 +47,33 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         toStation = station;
       }
     });
+  }
+
+  Future<void> _pickDepartureTime() async {
+    final now = DateTime.now();
+    final initialDate = departureTime.isBefore(now) ? now : departureTime;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 30)),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(departureTime.isBefore(now) ? now : departureTime),
+    );
+    if (time == null || !mounted) return;
+
+    final selected = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (selected.isBefore(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Departure time cannot be in the past.')),
+      );
+      return;
+    }
+    setState(() => departureTime = selected);
   }
 
   void _swapStations() {
@@ -58,6 +97,12 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       );
       return;
     }
+    if (departureTime.isBefore(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose a valid departure time.')),
+      );
+      return;
+    }
     setState(() => showResults = true);
   }
 
@@ -72,11 +117,15 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             _PlannerForm(
               fromStation: fromStation,
               toStation: toStation,
+              departureTime: departureTime,
+              selectedTransport: selectedTransport,
               onPickFrom: () => _pickStation(true),
               onPickTo: () => _pickStation(false),
               onClearFrom: fromStation == null ? null : () => setState(() => fromStation = null),
               onClearTo: toStation == null ? null : () => setState(() => toStation = null),
               onSwap: _swapStations,
+              onPickDepartureTime: _pickDepartureTime,
+              onTransportChanged: (value) => setState(() => selectedTransport = value),
             ),
             const SizedBox(height: 28),
             ElevatedButton(onPressed: _findRoute, child: const Text('Find Route')),
@@ -88,6 +137,11 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             Text(
               '${fromStation!.name} → ${toStation!.name}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_formatDeparture(departureTime)} • $selectedTransport',
+              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
             ),
             const SizedBox(height: 16),
             const _SortTabs(),
@@ -197,25 +251,34 @@ class _PlannerForm extends StatelessWidget {
   const _PlannerForm({
     required this.fromStation,
     required this.toStation,
+    required this.departureTime,
+    required this.selectedTransport,
     required this.onPickFrom,
     required this.onPickTo,
     required this.onClearFrom,
     required this.onClearTo,
     required this.onSwap,
+    required this.onPickDepartureTime,
+    required this.onTransportChanged,
   });
 
   final RouteStation? fromStation;
   final RouteStation? toStation;
+  final DateTime departureTime;
+  final String selectedTransport;
   final VoidCallback onPickFrom;
   final VoidCallback onPickTo;
   final VoidCallback? onClearFrom;
   final VoidCallback? onClearTo;
   final VoidCallback onSwap;
+  final VoidCallback onPickDepartureTime;
+  final ValueChanged<String> onTransportChanged;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _StationField(
             label: 'From',
@@ -245,22 +308,44 @@ class _PlannerForm extends StatelessWidget {
             onClear: onClearTo,
           ),
           const SizedBox(height: 16),
-          const TextField(
-            readOnly: true,
-            decoration: InputDecoration(
-              labelText: 'Departure Time',
-              hintText: 'Today, 10:30 AM',
-              prefixIcon: Icon(Icons.schedule_rounded),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onPickDepartureTime,
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Departure Time',
+                prefixIcon: Icon(Icons.schedule_rounded),
+                suffixIcon: Icon(Icons.edit_calendar_rounded),
+              ),
+              child: Text(
+                _formatDeparture(departureTime),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
           const SizedBox(height: 18),
+          Text('Transport', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: ['All', 'MRT', 'LRT', 'Bus', 'KTM']
-                .map((e) => ChoiceChip(label: Text(e), selected: e == 'All'))
+                .map(
+                  (transport) => ChoiceChip(
+                    label: Text(transport),
+                    selected: selectedTransport == transport,
+                    onSelected: (_) => onTransportChanged(transport),
+                  ),
+                )
                 .toList(),
           ),
+          if (PersonalisationService.instance.preferredTransport != 'All') ...[
+            const SizedBox(height: 10),
+            Text(
+              'Preferred transport from Profile: ${PersonalisationService.instance.preferredTransport}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );
@@ -421,6 +506,21 @@ String _formatTrips(int value) {
 
 String _formatDate(DateTime date) {
   return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
+
+String _formatDeparture(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final selectedDay = DateTime(date.year, date.month, date.day);
+  final dayText = selectedDay == today
+      ? 'Today'
+      : selectedDay == today.add(const Duration(days: 1))
+          ? 'Tomorrow'
+          : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final minute = date.minute.toString().padLeft(2, '0');
+  final period = date.hour >= 12 ? 'PM' : 'AM';
+  return '$dayText, $hour:$minute $period';
 }
 
 class _SortTabs extends StatelessWidget {
