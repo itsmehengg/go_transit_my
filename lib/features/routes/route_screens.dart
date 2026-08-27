@@ -174,7 +174,7 @@ class _StationSelectionScreenState extends State<StationSelectionScreen> {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: stations.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final station = stations[index];
                       return ListTile(
