@@ -52,6 +52,7 @@ class _GoTransitAppState extends State<GoTransitApp> {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: personalisation.darkMode ? ThemeMode.dark : ThemeMode.light,
+          themeAnimationDuration: Duration.zero,
           initialRoute: SplashScreen.routeName,
           routes: {
             SplashScreen.routeName: (_) => const SplashScreen(),
