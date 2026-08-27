@@ -3,23 +3,40 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfileService {
   ProfileService({SupabaseClient? client, ImagePicker? imagePicker})
-    : _client = client ?? Supabase.instance.client,
-      _imagePicker = imagePicker ?? ImagePicker();
+      : _client = client ?? Supabase.instance.client,
+        _imagePicker = imagePicker ?? ImagePicker();
 
   final SupabaseClient _client;
   final ImagePicker _imagePicker;
 
   User? get currentUser => _client.auth.currentUser;
 
+  Map<String, dynamic>? _fallbackProfile(User? user) {
+    if (user == null) return null;
+    return {
+      'id': user.id,
+      'full_name': user.userMetadata?['full_name'] ?? '',
+      'email': user.email ?? '',
+      'phone': user.userMetadata?['phone'] ?? '',
+      'membership_tier': user.userMetadata?['membership_tier'] ?? 'Free User',
+      'avatar_path': user.userMetadata?['avatar_path'],
+    };
+  }
+
   Future<Map<String, dynamic>?> getCurrentProfile() async {
     final user = currentUser;
     if (user == null) return null;
 
-    return _client
-        .from('app_users')
-        .select('id, full_name, email, phone, membership_tier, avatar_path')
-        .eq('id', user.id)
-        .maybeSingle();
+    try {
+      final profile = await _client
+          .from('app_users')
+          .select('id, full_name, email, phone, membership_tier, avatar_path')
+          .eq('id', user.id)
+          .maybeSingle();
+      return profile ?? _fallbackProfile(user);
+    } catch (_) {
+      return _fallbackProfile(user);
+    }
   }
 
   Future<Map<String, dynamic>> updateProfile({
@@ -31,28 +48,48 @@ class ProfileService {
       throw const AuthException('Please log in before updating your profile.');
     }
 
-    final profile = await _client
-        .from('app_users')
-        .update({'full_name': fullName.trim(), 'phone': phone.trim()})
-        .eq('id', user.id)
-        .select('id, full_name, email, phone, membership_tier, avatar_path')
-        .single();
+    final cleanName = fullName.trim();
+    final cleanPhone = phone.trim();
 
     await _client.auth.updateUser(
       UserAttributes(
-        data: {'full_name': fullName.trim(), 'phone': phone.trim()},
+        data: {
+          ...?user.userMetadata,
+          'full_name': cleanName,
+          'phone': cleanPhone,
+        },
       ),
     );
 
-    return profile;
+    try {
+      await _client.from('app_users').upsert({
+        'id': user.id,
+        'full_name': cleanName,
+        'email': user.email,
+        'phone': cleanPhone,
+      });
+    } catch (_) {}
+
+    final refreshedUser = currentUser;
+    final profile = await getCurrentProfile();
+    return profile ??
+        {
+          'id': refreshedUser?.id ?? user.id,
+          'full_name': cleanName,
+          'email': refreshedUser?.email ?? user.email ?? '',
+          'phone': cleanPhone,
+          'membership_tier': 'Free User',
+          'avatar_path': refreshedUser?.userMetadata?['avatar_path'],
+        };
   }
 
-  Future<String?> createAvatarSignedUrl(String? avatarPath) {
-    if (avatarPath == null || avatarPath.isEmpty) {
-      return Future.value();
+  Future<String?> createAvatarSignedUrl(String? avatarPath) async {
+    if (avatarPath == null || avatarPath.isEmpty) return null;
+    try {
+      return await _client.storage.from('avatars').createSignedUrl(avatarPath, 60 * 60);
+    } catch (_) {
+      return null;
     }
-
-    return _client.storage.from('avatars').createSignedUrl(avatarPath, 60 * 60);
   }
 
   Future<XFile?> pickProfilePhoto() {
@@ -66,19 +103,14 @@ class ProfileService {
   Future<String> uploadProfilePhoto(XFile image) async {
     final user = currentUser;
     if (user == null) {
-      throw const AuthException(
-        'Please log in before uploading a profile photo.',
-      );
+      throw const AuthException('Please log in before uploading a profile photo.');
     }
 
     final bytes = await image.readAsBytes();
     final extension = _fileExtension(image.name);
-    final filePath =
-        '${user.id}/profile-${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final filePath = '${user.id}/profile-${DateTime.now().millisecondsSinceEpoch}.$extension';
 
-    await _client.storage
-        .from('avatars')
-        .uploadBinary(
+    await _client.storage.from('avatars').uploadBinary(
           filePath,
           bytes,
           fileOptions: FileOptions(
@@ -87,10 +119,24 @@ class ProfileService {
           ),
         );
 
-    await _client
-        .from('app_users')
-        .update({'avatar_path': filePath})
-        .eq('id', user.id);
+    await _client.auth.updateUser(
+      UserAttributes(
+        data: {
+          ...?user.userMetadata,
+          'avatar_path': filePath,
+        },
+      ),
+    );
+
+    try {
+      await _client.from('app_users').upsert({
+        'id': user.id,
+        'email': user.email,
+        'full_name': user.userMetadata?['full_name'] ?? '',
+        'phone': user.userMetadata?['phone'] ?? '',
+        'avatar_path': filePath,
+      });
+    } catch (_) {}
 
     return filePath;
   }
@@ -98,7 +144,6 @@ class ProfileService {
   String _fileExtension(String fileName) {
     final parts = fileName.toLowerCase().split('.');
     if (parts.length < 2) return 'jpg';
-
     final extension = parts.last;
     if (extension == 'jpeg' || extension == 'jpg') return 'jpg';
     if (extension == 'png') return 'png';
