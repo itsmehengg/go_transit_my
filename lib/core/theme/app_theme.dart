@@ -19,6 +19,44 @@ class AppColors {
 }
 
 class AppTheme {
+  static TextTheme _textTheme(Color primaryText, Color secondaryText) {
+    const base = TextTheme(
+      displayLarge: TextStyle(fontSize: 57, fontWeight: FontWeight.w400),
+      displayMedium: TextStyle(fontSize: 45, fontWeight: FontWeight.w400),
+      displaySmall: TextStyle(fontSize: 36, fontWeight: FontWeight.w400),
+      headlineLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
+      headlineMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+      headlineSmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+      titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+      bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+    );
+
+    return base.copyWith(
+      displayLarge: base.displayLarge!.copyWith(color: primaryText),
+      displayMedium: base.displayMedium!.copyWith(color: primaryText),
+      displaySmall: base.displaySmall!.copyWith(color: primaryText),
+      headlineLarge: base.headlineLarge!.copyWith(color: primaryText),
+      headlineMedium: base.headlineMedium!.copyWith(color: primaryText),
+      headlineSmall: base.headlineSmall!.copyWith(color: primaryText),
+      titleLarge: base.titleLarge!.copyWith(color: primaryText),
+      titleMedium: base.titleMedium!.copyWith(color: primaryText),
+      titleSmall: base.titleSmall!.copyWith(color: primaryText),
+      bodyLarge: base.bodyLarge!.copyWith(color: primaryText),
+      bodyMedium: base.bodyMedium!.copyWith(color: primaryText),
+      bodySmall: base.bodySmall!.copyWith(color: secondaryText),
+      labelLarge: base.labelLarge!.copyWith(color: primaryText),
+      labelMedium: base.labelMedium!.copyWith(color: primaryText),
+      labelSmall: base.labelSmall!.copyWith(color: secondaryText),
+    );
+  }
+
   static ThemeData light() {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
@@ -29,13 +67,11 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.surfaceTint,
       fontFamily: 'Inter',
-      textTheme: ThemeData.light().textTheme.apply(
-        bodyColor: AppColors.text,
-        displayColor: AppColors.text,
-      ),
+      textTheme: _textTheme(AppColors.text, AppColors.muted),
       iconTheme: const IconThemeData(color: AppColors.text),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
@@ -48,10 +84,7 @@ class AppTheme {
         fillColor: const Color(0xFFF3F3FE),
         labelStyle: const TextStyle(color: AppColors.muted),
         hintStyle: const TextStyle(color: AppColors.muted),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 17,
-          vertical: 18,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 18),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.line),
@@ -105,10 +138,7 @@ class AppTheme {
       cardColor: AppColors.darkSurface,
       dividerColor: AppColors.darkLine,
       fontFamily: 'Inter',
-      textTheme: ThemeData.dark().textTheme.apply(
-        bodyColor: AppColors.darkText,
-        displayColor: AppColors.darkText,
-      ),
+      textTheme: _textTheme(AppColors.darkText, AppColors.darkMuted),
       iconTheme: const IconThemeData(color: AppColors.darkText),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
@@ -128,10 +158,7 @@ class AppTheme {
         hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
         prefixIconColor: AppColors.darkMuted,
         suffixIconColor: AppColors.darkMuted,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 17,
-          vertical: 18,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 18),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.darkLine),
