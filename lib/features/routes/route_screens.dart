@@ -18,11 +18,13 @@ class RoutePlannerScreen extends StatefulWidget {
 
 class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   final _routeSearchService = const RouteSearchService();
+  final _fareEstimationService = FareEstimationService();
   bool showResults = false;
   bool _isSearching = false;
   RouteStation? fromStation;
   RouteStation? toStation;
   List<RouteSearchResult> _routeOptions = const [];
+  RouteSearchResult? _cheapestRoute;
   String _recommendation = 'Fastest';
   DateTime departureTime = DateTime.now();
   String selectedTransport = 'All';
@@ -84,6 +86,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         toStation = station;
       }
       _routeOptions = const [];
+      _cheapestRoute = null;
       showResults = false;
     });
   }
@@ -119,6 +122,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       fromStation = toStation;
       toStation = oldFrom;
       _routeOptions = const [];
+      _cheapestRoute = null;
       showResults = false;
     });
   }
@@ -145,6 +149,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     setState(() {
       _isSearching = true;
       _routeOptions = const [];
+      _cheapestRoute = null;
       _recommendation = 'Fastest';
     });
     final results = await _routeSearchService.searchOptions(
@@ -160,10 +165,57 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     });
   }
 
+  Future<void> _changeRecommendation(String value) async {
+    if (value != 'Cheapest') {
+      setState(() => _recommendation = value);
+      return;
+    }
+
+    final freeRoute = _routeOptions.where((route) => route.modes.isEmpty).firstOrNull;
+    if (freeRoute != null) {
+      setState(() {
+        _cheapestRoute = freeRoute;
+        _recommendation = 'Cheapest';
+      });
+      return;
+    }
+
+    RouteSearchResult? cheapest;
+    double? lowestFare;
+    var pricedRoutes = 0;
+
+    for (final route in _routeOptions) {
+      final info = await _fareEstimationService.getStoredFareInfo(route);
+      if (!info.hasFare) continue;
+      pricedRoutes++;
+      if (lowestFare == null || info.fare! < lowestFare) {
+        lowestFare = info.fare;
+        cheapest = route;
+      }
+    }
+
+    if (!mounted) return;
+    if (cheapest == null || pricedRoutes != _routeOptions.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Some route fares are not stored yet, so the app cannot compare every route fairly.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _cheapestRoute = cheapest;
+      _recommendation = 'Cheapest';
+    });
+  }
+
   RouteSearchResult? get _recommendedRoute {
     if (_routeOptions.isEmpty) return null;
     final options = [..._routeOptions];
     switch (_recommendation) {
+      case 'Cheapest':
+        return _cheapestRoute ?? options.first;
       case 'Least Walking':
         options.sort((a, b) {
           final walking = a.walkingConnections.compareTo(b.walkingConnections);
@@ -206,12 +258,14 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                   : () => setState(() {
                         fromStation = null;
                         _routeOptions = const [];
+                        _cheapestRoute = null;
                       }),
               onClearTo: toStation == null
                   ? null
                   : () => setState(() {
                         toStation = null;
                         _routeOptions = const [];
+                        _cheapestRoute = null;
                       }),
               onSwap: _swapStations,
               onPickDepartureTime: _pickDepartureTime,
@@ -248,17 +302,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             else ...[
               RecommendationSelector(
                 selected: _recommendation,
-                onChanged: (value) {
-                  if (value == 'Cheapest') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Cheapest ranking needs machine-readable fare data. Use the official fare check below for current prices.'),
-                      ),
-                    );
-                    return;
-                  }
-                  setState(() => _recommendation = value);
-                },
+                onChanged: _changeRecommendation,
               ),
               const SizedBox(height: 14),
               RouteSearchResultCard(result: recommended, recommendation: _recommendation),
@@ -327,7 +371,7 @@ class RecommendationSelector extends StatelessWidget {
                   ? 'Prioritises routes with fewer walking connections.'
                   : selected == 'Fewest Transfers'
                       ? 'Prioritises routes with the fewest line changes.'
-                      : 'Cheapest ranking will use fare data when a machine-readable source is available.',
+                      : 'Compares stored fare references and selects the lowest available fare.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
@@ -668,49 +712,82 @@ class FareEstimateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ready = fromStation != null && toStation != null;
-    final fareInfo = result == null
-        ? null
-        : const FareEstimationService().getFareInfo(result!);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionTitle('Fare Estimation'),
-          const SizedBox(height: 14),
-          Text(
-            fareInfo?.title ?? (ready ? 'Fare check after route search' : 'Select your journey first'),
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            ready
-                ? '${fromStation!.name} to ${toStation!.name}'
-                : 'Choose a starting station and destination.',
-          ),
-          if (ready && fareInfo == null) ...[
-            const SizedBox(height: 8),
-            const Text('Find a route first so the app can identify the correct fare provider.'),
-          ],
-          if (fareInfo != null) ...[
-            const SizedBox(height: 8),
-            Text(fareInfo.message),
-            const SizedBox(height: 12),
-            for (final option in fareInfo.options)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () => _openFareSource(context, option),
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: Text(option.label),
-                ),
-              ),
+    if (result == null) {
+      return AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle('Fare Estimation'),
+            const SizedBox(height: 14),
             Text(
-              'Current fare is checked from the transport operator instead of displaying a guessed RM value.',
-              style: Theme.of(context).textTheme.bodySmall,
+              ready ? 'Fare check after route search' : 'Select your journey first',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
             ),
+            const SizedBox(height: 8),
+            Text(
+              ready
+                  ? '${fromStation!.name} to ${toStation!.name}'
+                  : 'Choose a starting station and destination.',
+            ),
+            if (ready) ...[
+              const SizedBox(height: 8),
+              const Text('Find a route first so the app can identify the correct fare.'),
+            ],
           ],
-        ],
-      ),
+        ),
+      );
+    }
+
+    return FutureBuilder<FareEstimateInfo>(
+      future: FareEstimationService().getStoredFareInfo(result!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const AppCard(
+            child: SizedBox(
+              height: 140,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final fareInfo = snapshot.data ?? FareEstimationService().getFareInfo(result!);
+        return AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionTitle('Fare Estimation'),
+              const SizedBox(height: 14),
+              Text(
+                fareInfo.title,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              Text('${fromStation!.name} to ${toStation!.name}'),
+              const SizedBox(height: 8),
+              Text(fareInfo.message),
+              if (fareInfo.sourceLabel != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Source: ${fareInfo.sourceLabel}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (fareInfo.options.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                for (final option in fareInfo.options)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openFareSource(context, option),
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: Text(option.label),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
