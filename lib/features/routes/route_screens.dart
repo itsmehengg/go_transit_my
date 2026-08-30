@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
-import '../../data/demo_data.dart';
 import '../profile/personalisation_service.dart';
 import 'ridership_service.dart';
+import 'route_search_service.dart';
 import 'station_catalog.dart';
 
 class RoutePlannerScreen extends StatefulWidget {
@@ -15,9 +15,12 @@ class RoutePlannerScreen extends StatefulWidget {
 }
 
 class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
+  final _routeSearchService = const RouteSearchService();
   bool showResults = false;
+  bool _isSearching = false;
   RouteStation? fromStation;
   RouteStation? toStation;
+  RouteSearchResult? _routeResult;
   DateTime departureTime = DateTime.now();
   String selectedTransport = 'All';
   late final PersonalisationService _personalisation;
@@ -77,6 +80,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       } else {
         toStation = station;
       }
+      _routeResult = null;
+      showResults = false;
     });
   }
 
@@ -112,10 +117,12 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       final oldFrom = fromStation;
       fromStation = toStation;
       toStation = oldFrom;
+      _routeResult = null;
+      showResults = false;
     });
   }
 
-  void _findRoute() {
+  Future<void> _findRoute() async {
     if (fromStation == null || toStation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select both starting station and destination.')),
@@ -134,7 +141,24 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       );
       return;
     }
-    setState(() => showResults = true);
+
+    setState(() {
+      _isSearching = true;
+      _routeResult = null;
+    });
+
+    final result = await _routeSearchService.search(
+      from: fromStation!,
+      to: toStation!,
+      transport: selectedTransport,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _routeResult = result;
+      _isSearching = false;
+      showResults = true;
+    });
   }
 
   @override
@@ -154,14 +178,33 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
               transportChangedForJourney: _transportChangedForJourney,
               onPickFrom: () => _pickStation(true),
               onPickTo: () => _pickStation(false),
-              onClearFrom: fromStation == null ? null : () => setState(() => fromStation = null),
-              onClearTo: toStation == null ? null : () => setState(() => toStation = null),
+              onClearFrom: fromStation == null
+                  ? null
+                  : () => setState(() {
+                        fromStation = null;
+                        _routeResult = null;
+                      }),
+              onClearTo: toStation == null
+                  ? null
+                  : () => setState(() {
+                        toStation = null;
+                        _routeResult = null;
+                      }),
               onSwap: _swapStations,
               onPickDepartureTime: _pickDepartureTime,
               onTransportChanged: _changeTransport,
             ),
             const SizedBox(height: 28),
-            ElevatedButton(onPressed: _findRoute, child: const Text('Find Route')),
+            ElevatedButton(
+              onPressed: _isSearching ? null : _findRoute,
+              child: _isSearching
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Find Route'),
+            ),
             const SizedBox(height: 28),
             FareEstimateCard(fromStation: fromStation, toStation: toStation),
             const SizedBox(height: 28),
@@ -174,25 +217,22 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             const SizedBox(height: 6),
             Text(
               '${_formatDeparture(departureTime)} • $selectedTransport',
-              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
-            const _SortTabs(),
-            const SizedBox(height: 16),
-            ...journeyOptions.map(
-              (option) => Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: RouteResultCard(option: option),
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 18),
+            if (_routeResult == null)
+              _NoRouteCard(transport: selectedTransport)
+            else ...[
+              RouteSearchResultCard(result: _routeResult!),
+              const SizedBox(height: 18),
+              RouteDetailsCard(result: _routeResult!),
+            ],
+            const SizedBox(height: 18),
             OutlinedButton.icon(
               onPressed: () => setState(() => showResults = false),
               icon: const Icon(Icons.edit_location_alt_outlined),
               label: const Text('Edit Search'),
             ),
-            const SizedBox(height: 18),
-            RouteDetailsCard(fromStation: fromStation!, toStation: toStation!),
             const SizedBox(height: 18),
             const RidershipInsightsCard(),
           ],
@@ -227,7 +267,9 @@ class _StationSelectionScreenState extends State<StationSelectionScreen> {
     final stations = routeStations.where((station) {
       if (station.name == widget.excludedStation?.name) return false;
       final text = query.trim().toLowerCase();
-      return text.isEmpty || station.name.toLowerCase().contains(text) || station.mode.toLowerCase().contains(text);
+      return text.isEmpty ||
+          station.name.toLowerCase().contains(text) ||
+          station.mode.toLowerCase().contains(text);
     }).toList();
 
     return Scaffold(
@@ -266,7 +308,10 @@ class _StationSelectionScreenState extends State<StationSelectionScreen> {
                       final station = stations[index];
                       return ListTile(
                         leading: const Icon(Icons.train_rounded),
-                        title: Text(station.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        title: Text(
+                          station.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
                         subtitle: Text(station.mode),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, station),
@@ -419,7 +464,10 @@ class _StationField extends StatelessWidget {
           prefixIcon: Icon(icon),
           suffixIcon: station == null
               ? const Icon(Icons.keyboard_arrow_down_rounded)
-              : IconButton(onPressed: onClear, icon: const Icon(Icons.close_rounded)),
+              : IconButton(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.close_rounded),
+                ),
         ),
         child: Text(
           station?.name ?? hint,
@@ -428,6 +476,158 @@ class _StationField extends StatelessWidget {
             fontWeight: station == null ? FontWeight.normal : FontWeight.w700,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class RouteSearchResultCard extends StatelessWidget {
+  const RouteSearchResultCard({required this.result, super.key});
+
+  final RouteSearchResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final transferText = result.transfers == 0
+        ? 'Direct journey'
+        : result.transfers == 1
+            ? '1 transfer'
+            : '${result.transfers} transfers';
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.route_rounded, color: AppColors.primary),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Route found',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+              ),
+              StatusChip(transferText, color: AppColors.primary),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            result.modes.isEmpty ? 'Walking connection' : result.modes.join(' + '),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Journey time and fare are not shown yet because they will be connected to verified transport data in the next stage.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoRouteCard extends StatelessWidget {
+  const _NoRouteCard({required this.transport});
+
+  final String transport;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        children: [
+          const Icon(Icons.route_outlined, size: 54, color: AppColors.muted),
+          const SizedBox(height: 12),
+          const Text(
+            'No route found',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            transport == 'Bus'
+                ? 'Bus route data is not connected yet. Try All, MRT, LRT, or KTM.'
+                : 'Try another transport type or choose different stations.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FareEstimateCard extends StatelessWidget {
+  const FareEstimateCard({this.fromStation, this.toStation, super.key});
+
+  final RouteStation? fromStation;
+  final RouteStation? toStation;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = fromStation != null && toStation != null;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionTitle('Fare Estimation'),
+          const SizedBox(height: 14),
+          Text(
+            ready ? 'Not calculated yet' : 'Select your journey first',
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            ready
+                ? '${fromStation!.name} to ${toStation!.name}'
+                : 'Choose a starting station and destination.',
+          ),
+          if (ready) ...[
+            const SizedBox(height: 8),
+            const Text('Only verified fare data will be displayed here.'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class RouteDetailsCard extends StatelessWidget {
+  const RouteDetailsCard({required this.result, super.key});
+
+  final RouteSearchResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final legs = result.groupedLegs;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionTitle('Route Details'),
+          const SizedBox(height: 14),
+          for (var i = 0; i < legs.length; i++)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                child: Icon(
+                  legs[i].mode == 'Walk'
+                      ? Icons.directions_walk_rounded
+                      : legs[i].mode == 'Bus'
+                          ? Icons.directions_bus_rounded
+                          : Icons.train_rounded,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                legs[i].line,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: Text('${legs[i].from} → ${legs[i].to}'),
+            ),
+          const SizedBox(height: 6),
+          Text(
+            'Schedule timing will be added when the official route data source is connected.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
@@ -460,7 +660,12 @@ class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
       future: _snapshotFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const AppCard(child: SizedBox(height: 150, child: Center(child: CircularProgressIndicator())));
+          return const AppCard(
+            child: SizedBox(
+              height: 150,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
         }
         if (snapshot.hasError) {
           return AppCard(
@@ -471,7 +676,11 @@ class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
                 const SizedBox(height: 10),
                 const Text('Unable to load government ridership data.'),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry')),
+                OutlinedButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
               ],
             ),
           );
@@ -484,11 +693,17 @@ class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
               Row(
                 children: [
                   const Expanded(child: SectionTitle('Ridership Insights')),
-                  IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+                  IconButton(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              Text(_formatTrips(data.total), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+              Text(
+                _formatTrips(data.total),
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+              ),
               const Text('Daily network trips'),
               const SizedBox(height: 14),
               Wrap(
@@ -502,7 +717,10 @@ class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text('Latest official data: ${_formatDate(data.date)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text(
+                'Latest official data: ${_formatDate(data.date)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
             ],
           ),
         );
@@ -513,6 +731,7 @@ class _RidershipInsightsCardState extends State<RidershipInsightsCard> {
 
 class _ModeStatTile extends StatelessWidget {
   const _ModeStatTile({required this.label, required this.value});
+
   final String label;
   final String value;
 
@@ -530,7 +749,10 @@ class _ModeStatTile extends StatelessWidget {
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
         ],
       ),
     );
@@ -563,114 +785,4 @@ String _formatDeparture(DateTime date) {
   final minute = date.minute.toString().padLeft(2, '0');
   final period = date.hour >= 12 ? 'PM' : 'AM';
   return '$day, $hour:$minute $period';
-}
-
-class _SortTabs extends StatelessWidget {
-  const _SortTabs();
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: ['Fastest', 'Cheapest', 'Least Walking', 'Fewest Transfers']
-          .map((e) => ChoiceChip(label: Text(e), selected: e == 'Fastest'))
-          .toList(),
-    );
-  }
-}
-
-class RouteResultCard extends StatelessWidget {
-  const RouteResultCard({required this.option, super.key});
-  final JourneyOption option;
-
-  @override
-  Widget build(BuildContext context) {
-    final live = option.status == 'Live';
-    return AppCard(
-      child: Row(
-        children: [
-          TransportIcon(icon: option.mode.icon, color: option.mode.color),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(option.duration, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                    const Spacer(),
-                    Text(option.fare, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(option.time, style: const TextStyle(color: AppColors.muted)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    StatusChip(option.mode.name, color: option.mode.color),
-                    const SizedBox(width: 8),
-                    StatusChip(option.status, color: live ? AppColors.success : AppColors.muted),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text('${option.transfers} • 450 m walking', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class FareEstimateCard extends StatelessWidget {
-  const FareEstimateCard({this.fromStation, this.toStation, super.key});
-  final RouteStation? fromStation;
-  final RouteStation? toStation;
-
-  @override
-  Widget build(BuildContext context) {
-    final ready = fromStation != null && toStation != null;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionTitle('Fare Estimation'),
-          const SizedBox(height: 14),
-          Text(ready ? 'Available after route search' : 'Select your journey first', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          Text(ready ? '${fromStation!.name} to ${toStation!.name}' : 'Choose a starting station and destination.'),
-        ],
-      ),
-    );
-  }
-}
-
-class RouteDetailsCard extends StatelessWidget {
-  const RouteDetailsCard({required this.fromStation, required this.toStation, super.key});
-  final RouteStation fromStation;
-  final RouteStation toStation;
-
-  @override
-  Widget build(BuildContext context) {
-    final steps = ['Start at ${fromStation.name}', 'Follow selected public transport route', 'Arrive at ${toStation.name}'];
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionTitle('Route Details'),
-          const SizedBox(height: 14),
-          for (var i = 0; i < steps.length; i++)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(child: Text('${i + 1}')),
-              title: Text(steps[i], style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: const Text('Route details will be calculated in the next part.'),
-            ),
-          ElevatedButton(onPressed: null, child: const Text('View on Map')),
-        ],
-      ),
-    );
-  }
 }
