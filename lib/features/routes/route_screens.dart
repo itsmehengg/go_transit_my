@@ -21,6 +21,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   final _fareEstimationService = FareEstimationService();
   bool showResults = false;
   bool _isSearching = false;
+  bool _isSavingRoute = false;
   RouteStation? fromStation;
   RouteStation? toStation;
   List<RouteSearchResult> _routeOptions = const [];
@@ -157,12 +158,39 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       to: toStation!,
       transport: selectedTransport,
     );
+    if (results.isNotEmpty) {
+      await _personalisation.addRecentSearch(
+        '${fromStation!.name} → ${toStation!.name} • $selectedTransport',
+      );
+    }
     if (!mounted) return;
     setState(() {
       _routeOptions = results;
       _isSearching = false;
       showResults = true;
     });
+  }
+
+  String _routeRecord(RouteSearchResult route) {
+    final mode = route.modes.isEmpty ? 'Walk' : route.modes.join(' + ');
+    return '${route.from.name} → ${route.to.name} • $mode';
+  }
+
+  Future<void> _saveRoute(RouteSearchResult route) async {
+    final record = _routeRecord(route);
+    if (_personalisation.favouriteRoutes.contains(record)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This route is already in Favourite Routes.')),
+      );
+      return;
+    }
+    setState(() => _isSavingRoute = true);
+    await _personalisation.addFavouriteRoute(record);
+    if (!mounted) return;
+    setState(() => _isSavingRoute = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Route saved to Favourite Routes.')),
+    );
   }
 
   Future<void> _changeRecommendation(String value) async {
@@ -238,6 +266,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   @override
   Widget build(BuildContext context) {
     final recommended = _recommendedRoute;
+    final saved = recommended != null &&
+        _personalisation.favouriteRoutes.contains(_routeRecord(recommended));
     return Scaffold(
       appBar: AppBar(title: Text(showResults ? 'Route Results' : 'Plan Journey')),
       body: ListView(
@@ -320,6 +350,12 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                 fromStation: fromStation,
                 toStation: toStation,
                 result: recommended,
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: saved || _isSavingRoute ? null : () => _saveRoute(recommended),
+                icon: Icon(saved ? Icons.favorite_rounded : Icons.favorite_border_rounded),
+                label: Text(saved ? 'Saved to Favourite Routes' : 'Save Route'),
               ),
             ],
             const SizedBox(height: 18),
