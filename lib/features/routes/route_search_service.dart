@@ -29,12 +29,13 @@ class RouteSearchResult {
 
   int get transfers {
     if (legs.isEmpty) return 0;
-    var changes = 0;
-    for (var i = 1; i < legs.length; i++) {
-      if (legs[i - 1].line != legs[i].line) changes++;
-    }
-    return changes;
+    final paid = groupedLegs.where((leg) => leg.mode != 'Walk').toList();
+    return paid.length > 1 ? paid.length - 1 : 0;
   }
+
+  int get stops => legs.where((leg) => leg.mode != 'Walk').length;
+
+  int get walkingConnections => legs.where((leg) => leg.mode == 'Walk').length;
 
   List<String> get modes {
     final result = <String>[];
@@ -66,6 +67,8 @@ class RouteSearchResult {
     grouped.add(current);
     return grouped;
   }
+
+  String get signature => legs.map((leg) => '${leg.from}|${leg.to}|${leg.line}').join('>');
 }
 
 class RouteSearchService {
@@ -76,18 +79,32 @@ class RouteSearchService {
     required RouteStation to,
     required String transport,
   }) async {
+    final results = await searchOptions(from: from, to: to, transport: transport);
+    return results.isEmpty ? null : results.first;
+  }
+
+  Future<List<RouteSearchResult>> searchOptions({
+    required RouteStation from,
+    required RouteStation to,
+    required String transport,
+    int limit = 8,
+  }) async {
     final graph = _buildGraph(transport);
     final queue = Queue<_SearchState>();
-    final visited = <String>{from.name};
-    queue.add(_SearchState(station: from.name, legs: const []));
+    final results = <RouteSearchResult>[];
+    final signatures = <String>{};
+    queue.add(_SearchState(station: from.name, legs: const [], visited: {from.name}));
 
-    while (queue.isNotEmpty) {
+    while (queue.isNotEmpty && results.length < limit) {
       final current = queue.removeFirst();
       if (current.station == to.name) {
-        return RouteSearchResult(from: from, to: to, legs: current.legs);
+        final result = RouteSearchResult(from: from, to: to, legs: current.legs);
+        if (signatures.add(result.signature)) results.add(result);
+        continue;
       }
+      if (current.legs.length >= 18) continue;
       for (final edge in graph[current.station] ?? const <_RouteEdge>[]) {
-        if (!visited.add(edge.to)) continue;
+        if (current.visited.contains(edge.to)) continue;
         queue.add(
           _SearchState(
             station: edge.to,
@@ -100,11 +117,18 @@ class RouteSearchService {
                 line: edge.line,
               ),
             ],
+            visited: {...current.visited, edge.to},
           ),
         );
       }
     }
-    return null;
+
+    results.sort((a, b) {
+      final stops = a.stops.compareTo(b.stops);
+      if (stops != 0) return stops;
+      return a.transfers.compareTo(b.transfers);
+    });
+    return results;
   }
 
   Map<String, List<_RouteEdge>> _buildGraph(String transport) {
@@ -148,10 +172,11 @@ class _RouteEdge {
 }
 
 class _SearchState {
-  const _SearchState({required this.station, required this.legs});
+  const _SearchState({required this.station, required this.legs, required this.visited});
 
   final String station;
   final List<RouteLeg> legs;
+  final Set<String> visited;
 }
 
 class _TransitLine {
