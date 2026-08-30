@@ -15,12 +15,7 @@ class FavouriteStationsScreen extends StatelessWidget {
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: const Text('Favourite Stations')),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showAddItemDialog(
-            context,
-            title: 'Add Favourite Station',
-            hint: 'e.g. KL Sentral',
-            onAdd: service.addFavouriteStation,
-          ),
+          onPressed: () => _showAddStationDialog(context, service),
           icon: const Icon(Icons.add_rounded),
           label: const Text('Add'),
         ),
@@ -35,6 +30,38 @@ class FavouriteStationsScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _showAddStationDialog(
+    BuildContext context,
+    PersonalisationService service,
+  ) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Favourite Station'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(hintText: 'e.g. KL Sentral'),
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value != null) await service.addFavouriteStation(value);
+  }
 }
 
 class FavouriteRoutesScreen extends StatelessWidget {
@@ -47,21 +74,11 @@ class FavouriteRoutesScreen extends StatelessWidget {
       animation: service,
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: const Text('Favourite Routes')),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showAddItemDialog(
-            context,
-            title: 'Add Favourite Route',
-            hint: 'e.g. KL Sentral → KLCC',
-            onAdd: service.addFavouriteRoute,
-          ),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add'),
-        ),
         body: _StringListBody(
           items: service.favouriteRoutes,
           emptyIcon: Icons.route_outlined,
           emptyTitle: 'No favourite routes yet',
-          emptyMessage: 'Saved routes will appear here.',
+          emptyMessage: 'Save a route from Route Results and it will appear here.',
           leadingIcon: Icons.route_rounded,
           onDelete: service.removeFavouriteRoute,
         ),
@@ -332,38 +349,4 @@ class _StringListBody extends StatelessWidget {
       },
     );
   }
-}
-
-Future<void> _showAddItemDialog(
-  BuildContext context, {
-  required String title,
-  required String hint,
-  required Future<void> Function(String) onAdd,
-}) async {
-  final controller = TextEditingController();
-  final value = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        decoration: InputDecoration(hintText: hint),
-        onSubmitted: (value) => Navigator.pop(context, value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-  controller.dispose();
-  if (value != null) await onAdd(value);
 }
