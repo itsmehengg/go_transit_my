@@ -16,12 +16,6 @@ class RouteLeg {
   final String mode;
   final String line;
   final int stopCount;
-
-  String get displayLine {
-    if (mode == 'Walk') return line;
-    final label = stopCount == 1 ? '1 stop' : '$stopCount stops';
-    return '$line • $label';
-  }
 }
 
 class RouteSearchResult {
@@ -90,29 +84,33 @@ class RouteSearchResult {
           stopCount: count,
         );
       } else {
-        grouped.add(
-          RouteLeg(
-            from: current.from,
-            to: current.to,
-            mode: current.mode,
-            line: current.line,
-            stopCount: current.mode == 'Walk' ? 0 : count,
-          ),
-        );
+        grouped.add(_displayLeg(current, count));
         current = next;
         count = current.mode == 'Walk' ? 0 : 1;
       }
     }
-    grouped.add(
-      RouteLeg(
-        from: current.from,
-        to: current.to,
-        mode: current.mode,
-        line: current.line,
-        stopCount: current.mode == 'Walk' ? 0 : count,
-      ),
-    );
+    grouped.add(_displayLeg(current, count));
     return grouped;
+  }
+
+  RouteLeg _displayLeg(RouteLeg leg, int count) {
+    if (leg.mode == 'Walk') {
+      return RouteLeg(
+        from: leg.from,
+        to: leg.to,
+        mode: leg.mode,
+        line: 'Walk interchange • ${leg.line}',
+        stopCount: 0,
+      );
+    }
+    final stopText = count == 1 ? '1 stop' : '$count stops';
+    return RouteLeg(
+      from: leg.from,
+      to: leg.to,
+      mode: leg.mode,
+      line: '${leg.line} • $stopText',
+      stopCount: count,
+    );
   }
 
   String get signature => legs.map((leg) => '${leg.from}|${leg.to}|${leg.line}').join('>');
