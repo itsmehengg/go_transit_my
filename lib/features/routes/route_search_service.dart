@@ -8,12 +8,20 @@ class RouteLeg {
     required this.to,
     required this.mode,
     required this.line,
+    this.stopCount = 1,
   });
 
   final String from;
   final String to;
   final String mode;
   final String line;
+  final int stopCount;
+
+  String get displayLine {
+    if (mode == 'Walk') return line;
+    final label = stopCount == 1 ? '1 stop' : '$stopCount stops';
+    return '$line • $label';
+  }
 }
 
 class RouteSearchResult {
@@ -46,25 +54,64 @@ class RouteSearchResult {
     return result;
   }
 
+  List<String> get transferStations {
+    final grouped = groupedLegs;
+    final result = <String>[];
+    for (var i = 0; i < grouped.length - 1; i++) {
+      final current = grouped[i];
+      final next = grouped[i + 1];
+      if (current.mode == 'Walk' || next.mode == 'Walk') continue;
+      if (current.to == next.from && !result.contains(current.to)) {
+        result.add(current.to);
+      }
+    }
+    return result;
+  }
+
+  List<String> get stationSequence {
+    if (legs.isEmpty) return [from.name, to.name];
+    return [legs.first.from, ...legs.map((leg) => leg.to)];
+  }
+
   List<RouteLeg> get groupedLegs {
     if (legs.isEmpty) return const [];
     final grouped = <RouteLeg>[];
     var current = legs.first;
+    var count = current.mode == 'Walk' ? 0 : 1;
     for (var i = 1; i < legs.length; i++) {
       final next = legs[i];
       if (next.line == current.line && next.mode == current.mode) {
+        if (next.mode != 'Walk') count++;
         current = RouteLeg(
           from: current.from,
           to: next.to,
           mode: current.mode,
           line: current.line,
+          stopCount: count,
         );
       } else {
-        grouped.add(current);
+        grouped.add(
+          RouteLeg(
+            from: current.from,
+            to: current.to,
+            mode: current.mode,
+            line: current.line,
+            stopCount: current.mode == 'Walk' ? 0 : count,
+          ),
+        );
         current = next;
+        count = current.mode == 'Walk' ? 0 : 1;
       }
     }
-    grouped.add(current);
+    grouped.add(
+      RouteLeg(
+        from: current.from,
+        to: current.to,
+        mode: current.mode,
+        line: current.line,
+        stopCount: current.mode == 'Walk' ? 0 : count,
+      ),
+    );
     return grouped;
   }
 
