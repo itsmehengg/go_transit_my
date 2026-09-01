@@ -206,6 +206,7 @@ class _StationList extends StatelessWidget {
             stops: filtered.take(100).toList(),
             vehicles: data.vehicleSnapshot.vehicles.take(180).toList(),
             userLocation: data.userLocation,
+            onOpenStation: onOpenStation,
           ),
           const SizedBox(height: 12),
           AppCard(
@@ -742,83 +743,161 @@ class _StationMap extends StatelessWidget {
     required this.stops,
     required this.vehicles,
     required this.userLocation,
+    required this.onOpenStation,
   });
 
   final List<StaticGtfsStop> stops;
   final List<LiveVehicle> vehicles;
   final LatLng? userLocation;
+  final ValueChanged<StaticGtfsStop> onOpenStation;
 
   @override
   Widget build(BuildContext context) {
     final center = userLocation ??
         (stops.isNotEmpty ? stops.first.point : const LatLng(3.1390, 101.6869));
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 270,
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: center,
-            initialZoom: userLocation == null ? 10.5 : 13,
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.go_transit_my',
-            ),
-            MarkerLayer(
-              markers: [
-                if (userLocation != null)
-                  Marker(
-                    point: userLocation!,
-                    width: 44,
-                    height: 44,
-                    child: const Icon(
-                      Icons.my_location_rounded,
-                      color: AppColors.primary,
-                      size: 30,
-                    ),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 270,
+          child: Stack(
+            children: [
+              FlutterMap(
+                options: MapOptions(
+                  initialCenter: center,
+                  initialZoom: userLocation == null ? 10.5 : 13,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.go_transit_my',
                   ),
-                ...stops.map(
-                  (stop) => Marker(
-                    point: stop.point,
-                    width: 34,
-                    height: 34,
-                    child: Tooltip(
-                      message: '${stop.name} • ${stop.agency}',
-                      child: Icon(
-                        stop.agency.contains('Bus')
-                            ? Icons.directions_bus_rounded
-                            : Icons.train_rounded,
-                        color: _agencyColor(stop.agency),
-                        size: 24,
+                  MarkerLayer(
+                    markers: [
+                      if (userLocation != null)
+                        Marker(
+                          point: userLocation!,
+                          width: 44,
+                          height: 44,
+                          child: const Icon(
+                            Icons.my_location_rounded,
+                            color: AppColors.primary,
+                            size: 30,
+                          ),
+                        ),
+                      ...stops.map(
+                        (stop) => Marker(
+                          point: stop.point,
+                          width: 40,
+                          height: 40,
+                          child: Tooltip(
+                            message: '${stop.name} • ${stop.agency}',
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => onOpenStation(stop),
+                                child: Center(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white.withValues(
+                                        alpha: .88,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: .18,
+                                          ),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Icon(
+                                        stop.agency.contains('Bus')
+                                            ? Icons.directions_bus_rounded
+                                            : Icons.train_rounded,
+                                        color: _agencyColor(stop.agency),
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
+                      ...vehicles.map(
+                        (vehicle) => Marker(
+                          point: vehicle.point,
+                          width: 34,
+                          height: 34,
+                          child: Icon(
+                            vehicle.type == LiveVehicleType.bus
+                                ? Icons.directions_bus_filled_rounded
+                                : Icons.train_rounded,
+                            color: _vehicleColor(vehicle.type),
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('OpenStreetMap contributors'),
+                    ],
+                  ),
+                ],
+              ),
+              Positioned(
+                top: 10,
+                left: 10,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .92),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .14),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.touch_app_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Click a station for details',
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                ...vehicles.map(
-                  (vehicle) => Marker(
-                    point: vehicle.point,
-                    width: 34,
-                    height: 34,
-                    child: Icon(
-                      vehicle.type == LiveVehicleType.bus
-                          ? Icons.directions_bus_filled_rounded
-                          : Icons.train_rounded,
-                      color: _vehicleColor(vehicle.type),
-                      size: 22,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const RichAttributionWidget(
-              attributions: [
-                TextSourceAttribution('OpenStreetMap contributors'),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
