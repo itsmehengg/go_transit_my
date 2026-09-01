@@ -57,8 +57,6 @@ class GtfsVehicleService {
   final http.Client _client;
 
   Future<LiveVehicleSnapshot> fetchAllVehicles() async {
-    // The official API is rate-limited, so request the supported feeds in
-    // sequence instead of creating a burst of simultaneous calls.
     final results = <VehicleFeedResult>[];
     for (final feed in _feeds) {
       results.add(await _fetchFeed(feed));
@@ -128,9 +126,6 @@ class _GtfsFeed {
   final LiveVehicleType type;
 }
 
-// data.gov.my currently provides vehicle positions only. Rapid Rail realtime
-// is intentionally excluded because the official API documents it as not yet
-// stable. Rail users still receive official scheduled GTFS timetable data.
 final _feeds = [
   _GtfsFeed(
     name: 'KTMB',

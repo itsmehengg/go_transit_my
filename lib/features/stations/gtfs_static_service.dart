@@ -64,8 +64,6 @@ class GtfsStaticService {
   final Map<String, Archive> _archiveCache = {};
 
   Future<StaticGtfsSnapshot> fetchAllStatic() async {
-    // Keep the number of official feeds deliberately small so the app stays
-    // within data.gov.my rate limits and loads reliably on student devices.
     final results = <StaticGtfsFeedResult>[];
     for (final feed in _feeds) {
       results.add(await _fetchFeed(feed));
