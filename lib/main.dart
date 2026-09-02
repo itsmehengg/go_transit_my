@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'features/alerts/background_alert_service.dart';
 import 'features/profile/personalisation_service.dart';
 
 Future<void> main() async {
@@ -13,6 +14,9 @@ Future<void> main() async {
   );
 
   await PersonalisationService.instance.initialise();
+  await BackgroundAlertService.instance.initialise(
+    enabled: PersonalisationService.instance.notificationsEnabled,
+  );
 
   runApp(const GoTransitApp());
 }
