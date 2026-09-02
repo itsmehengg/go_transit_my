@@ -4,7 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../alerts/alerts_screens.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
-import '../routes/route_screens.dart';
+import '../routes/route_planner_screen.dart';
 import '../stations/station_screens.dart';
 
 class AppShell extends StatefulWidget {
