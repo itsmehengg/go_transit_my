@@ -111,8 +111,6 @@ class RouteTimingService {
 
     final byTrip = <String, List<Map<String, String>>>{};
     for (final row in _parseCsv(_text(stopTimesFile))) {
-      final stopId = (row['stop_id'] ?? '').trim();
-      if (!fromIds.contains(stopId) && !toIds.contains(stopId)) continue;
       final tripId = (row['trip_id'] ?? '').trim();
       if (tripId.isEmpty) continue;
       if (!useCalendarFallback &&
@@ -123,12 +121,29 @@ class RouteTimingService {
       byTrip.putIfAbsent(tripId, () => []).add(row);
     }
 
+    final frequencies = <String, List<Map<String, String>>>{};
+    final frequenciesFile = _findFile(archive, 'frequencies.txt');
+    if (frequenciesFile != null) {
+      for (final row in _parseCsv(_text(frequenciesFile))) {
+        final tripId = (row['trip_id'] ?? '').trim();
+        if (tripId.isEmpty) continue;
+        frequencies.putIfAbsent(tripId, () => []).add(row);
+      }
+    }
+
     final requestedSeconds = requestedDeparture.hour * 3600 +
         requestedDeparture.minute * 60 +
         requestedDeparture.second;
     ({int departure, int arrival})? best;
 
-    for (final rows in byTrip.values) {
+    for (final entry in byTrip.entries) {
+      final rows = [...entry.value]
+        ..sort((a, b) {
+          final aSequence = int.tryParse((a['stop_sequence'] ?? '').trim()) ?? 0;
+          final bSequence = int.tryParse((b['stop_sequence'] ?? '').trim()) ?? 0;
+          return aSequence.compareTo(bSequence);
+        });
+
       Map<String, String>? origin;
       Map<String, String>? destination;
 
@@ -147,22 +162,71 @@ class RouteTimingService {
         }
       }
 
-      if (origin == null || destination == null) continue;
+      if (origin == null || destination == null || rows.isEmpty) continue;
       final originSequence = int.tryParse(origin['stop_sequence'] ?? '') ?? -1;
       final destinationSequence = int.tryParse(destination['stop_sequence'] ?? '') ?? -1;
       if (destinationSequence <= originSequence) continue;
 
-      final departure = _seconds(
+      final templateStart = _seconds(
+        rows.first['departure_time'] ?? rows.first['arrival_time'] ?? '',
+      );
+      final templateOrigin = _seconds(
         origin['departure_time'] ?? origin['arrival_time'] ?? '',
       );
-      final arrival = _seconds(
+      final templateDestination = _seconds(
         destination['arrival_time'] ?? destination['departure_time'] ?? '',
       );
-      if (departure == null || arrival == null || arrival <= departure) continue;
-      if (departure < requestedSeconds) continue;
+      if (templateStart == null ||
+          templateOrigin == null ||
+          templateDestination == null ||
+          templateDestination <= templateOrigin) {
+        continue;
+      }
 
-      if (best == null || departure < best.departure) {
-        best = (departure: departure, arrival: arrival);
+      final tripFrequencies = frequencies[entry.key];
+      if (tripFrequencies != null && tripFrequencies.isNotEmpty) {
+        final originOffset = templateOrigin - templateStart;
+        final destinationOffset = templateDestination - templateStart;
+
+        for (final frequency in tripFrequencies) {
+          final start = _seconds((frequency['start_time'] ?? '').trim());
+          final end = _seconds((frequency['end_time'] ?? '').trim());
+          final headway = int.tryParse((frequency['headway_secs'] ?? '').trim());
+          if (start == null || end == null || headway == null || headway <= 0) {
+            continue;
+          }
+
+          final firstOrigin = start + originOffset;
+          var index = 0;
+          if (requestedSeconds > firstOrigin) {
+            index = ((requestedSeconds - firstOrigin) / headway).ceil();
+          }
+
+          final candidateTripStart = start + index * headway;
+          if (candidateTripStart >= end) continue;
+
+          final candidateDeparture = candidateTripStart + originOffset;
+          final candidateArrival = candidateTripStart + destinationOffset;
+          if (candidateDeparture < requestedSeconds ||
+              candidateArrival <= candidateDeparture) {
+            continue;
+          }
+
+          if (best == null || candidateDeparture < best.departure) {
+            best = (
+              departure: candidateDeparture,
+              arrival: candidateArrival,
+            );
+          }
+        }
+      } else {
+        if (templateOrigin < requestedSeconds) continue;
+        if (best == null || templateOrigin < best.departure) {
+          best = (
+            departure: templateOrigin,
+            arrival: templateDestination,
+          );
+        }
       }
     }
 
