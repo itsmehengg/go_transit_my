@@ -2,6 +2,14 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+class ServiceRidership {
+  const ServiceRidership({required this.name, required this.mode, required this.trips});
+
+  final String name;
+  final String mode;
+  final int trips;
+}
+
 class RidershipSnapshot {
   const RidershipSnapshot({
     required this.date,
@@ -11,6 +19,8 @@ class RidershipSnapshot {
     required this.ktm,
     required this.bus,
     required this.recentTotals,
+    required this.services,
+    required this.previousTotal,
   });
 
   final DateTime date;
@@ -20,6 +30,24 @@ class RidershipSnapshot {
   final int ktm;
   final int bus;
   final List<int> recentTotals;
+  final List<ServiceRidership> services;
+  final int previousTotal;
+
+  ServiceRidership get busiestService {
+    final ranked = [...services]..sort((a, b) => b.trips.compareTo(a.trips));
+    return ranked.first;
+  }
+
+  double get changePercent {
+    if (previousTotal == 0) return 0;
+    return ((total - previousTotal) / previousTotal) * 100;
+  }
+
+  String get activityTrend {
+    if (changePercent >= 5) return 'Higher than previous day';
+    if (changePercent <= -5) return 'Lower than previous day';
+    return 'Similar to previous day';
+  }
 }
 
 class RidershipService {
@@ -51,24 +79,26 @@ class RidershipService {
       ].join(','),
     });
 
-    final response = await _client
-        .get(uri)
-        .timeout(const Duration(seconds: 15));
+    final response = await _client.get(uri).timeout(const Duration(seconds: 15));
 
     if (response.statusCode != 200) {
-      throw Exception('Ridership API failed: HTTP ${response.statusCode}');
+      throw Exception('Government ridership API failed: HTTP ${response.statusCode}');
     }
 
     final decoded = jsonDecode(response.body);
     if (decoded is! List || decoded.isEmpty) {
-      throw Exception('Ridership API returned no data.');
+      throw Exception('Government ridership API returned no data.');
     }
 
-    final rows = decoded.cast<Map<String, dynamic>>();
+    final rows = decoded
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
     final latest = rows.first;
+    final services = _serviceBreakdown(latest);
 
     return RidershipSnapshot(
-      date: DateTime.parse(latest['date'] as String),
+      date: DateTime.parse(latest['date'].toString()),
       total: _totalTrips(latest),
       mrt: _sum(latest, const ['rail_mrt_kajang', 'rail_mrt_pjy']),
       lrt: _sum(latest, const [
@@ -86,7 +116,31 @@ class RidershipService {
       ]),
       bus: _sum(latest, const ['bus_rkl', 'bus_rkn', 'bus_rpn']),
       recentTotals: rows.map(_totalTrips).toList().reversed.toList(),
+      services: services,
+      previousTotal: rows.length > 1 ? _totalTrips(rows[1]) : 0,
     );
+  }
+
+  List<ServiceRidership> _serviceBreakdown(Map<String, dynamic> row) {
+    final services = <ServiceRidership>[
+      ServiceRidership(name: 'MRT Kajang Line', mode: 'MRT', trips: _asInt(row['rail_mrt_kajang'])),
+      ServiceRidership(name: 'MRT Putrajaya Line', mode: 'MRT', trips: _asInt(row['rail_mrt_pjy'])),
+      ServiceRidership(name: 'LRT Ampang Line', mode: 'LRT', trips: _asInt(row['rail_lrt_ampang'])),
+      ServiceRidership(name: 'LRT Kelana Jaya Line', mode: 'LRT', trips: _asInt(row['rail_lrt_kj'])),
+      ServiceRidership(name: 'LRT Shah Alam Line', mode: 'LRT', trips: _asInt(row['rail_lrt_shah_alam'])),
+      ServiceRidership(name: 'Monorail Line', mode: 'LRT', trips: _asInt(row['rail_monorail'])),
+      ServiceRidership(name: 'KTM Komuter', mode: 'KTM', trips: _asInt(row['rail_komuter'])),
+      ServiceRidership(name: 'KTM Komuter Utara', mode: 'KTM', trips: _asInt(row['rail_komuter_utara'])),
+      ServiceRidership(name: 'KTMB ETS', mode: 'KTM', trips: _asInt(row['rail_ets'])),
+      ServiceRidership(name: 'KTM Intercity', mode: 'KTM', trips: _asInt(row['rail_intercity'])),
+      ServiceRidership(name: 'KTM Shuttle Tebrau', mode: 'KTM', trips: _asInt(row['rail_tebrau'])),
+      ServiceRidership(name: 'Rapid Bus KL', mode: 'Bus', trips: _asInt(row['bus_rkl'])),
+      ServiceRidership(name: 'Rapid Bus Penang', mode: 'Bus', trips: _asInt(row['bus_rpn'])),
+      ServiceRidership(name: 'Rapid Bus Kuantan', mode: 'Bus', trips: _asInt(row['bus_rkn'])),
+    ];
+    services.removeWhere((service) => service.trips <= 0);
+    services.sort((a, b) => b.trips.compareTo(a.trips));
+    return services;
   }
 
   int _totalTrips(Map<String, dynamic> row) {
