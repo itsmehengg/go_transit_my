@@ -38,7 +38,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     super.initState();
     _personalisation = PersonalisationService.instance;
     final preferred = _personalisation.preferredTransport;
-    if (const ['All', 'MRT', 'LRT', 'Bus', 'KTM'].contains(preferred)) {
+    if (const ['All', 'MRT', 'LRT', 'KTM'].contains(preferred)) {
       _transport = preferred;
     }
   }
@@ -125,6 +125,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         to: _to!,
         transport: _transport,
       );
+
       if (route == null) {
         if (!mounted) return;
         setState(() {
@@ -137,19 +138,21 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         return;
       }
 
-      final timing = await _buildJourney(route);
+      final journey = await _buildJourney(route);
       final fare = await _fareService.getStoredFareInfo(route);
-      await _personalisation.addRecentSearch('${_from!.name} → ${_to!.name} • $_transport');
+      await _personalisation.addRecentSearch(
+        '${_from!.name} → ${_to!.name} • $_transport',
+      );
 
       if (!mounted) return;
       setState(() {
         _route = route;
-        _journey = timing;
+        _journey = journey;
         _fare = fare;
         _searching = false;
         _showResult = true;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _searching = false;
@@ -162,6 +165,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
   Future<RouteJourneyDetails> _buildJourney(RouteSearchResult route) async {
     final details = <JourneyLegDetails>[];
     var nextDeparture = _departure;
+    var complete = true;
+
     for (final leg in route.groupedLegs) {
       if (leg.mode == 'Walk') {
         const minutes = 8;
@@ -172,7 +177,7 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             departure: nextDeparture,
             arrival: arrival,
             durationMinutes: minutes,
-            timingSource: 'Estimated walking connection',
+            timingSource: 'Estimated walking time',
             isEstimate: true,
           ),
         );
@@ -186,25 +191,34 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         to: leg.to,
         requestedDeparture: nextDeparture,
       );
+
       if (timing == null) {
+        complete = false;
         details.add(JourneyLegDetails(leg: leg));
         continue;
       }
+
       details.add(
         JourneyLegDetails(
           leg: leg,
           departure: timing.departure,
           arrival: timing.arrival,
           durationMinutes: timing.durationMinutes,
-          timingSource: timing.source,
+          timingSource: timing.usesCalendarFallback
+              ? 'Malaysia Government GTFS timetable reference'
+              : 'Malaysia Government GTFS scheduled service',
+          isEstimate: timing.usesCalendarFallback,
         ),
       );
       nextDeparture = timing.arrival;
     }
 
-    final timed = details.where((item) => item.arrival != null).toList();
-    final arrival = timed.isEmpty ? null : timed.last.arrival;
-    return RouteJourneyDetails(legs: details, arrival: arrival);
+    final arrival = complete && details.isNotEmpty ? details.last.arrival : null;
+    return RouteJourneyDetails(
+      legs: details,
+      arrival: arrival,
+      complete: complete,
+    );
   }
 
   Future<void> _save() async {
@@ -253,7 +267,11 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             ),
             Align(
               alignment: Alignment.centerRight,
-              child: IconButton(onPressed: _swap, icon: const Icon(Icons.swap_vert_rounded)),
+              child: IconButton(
+                tooltip: 'Swap stations',
+                onPressed: _swap,
+                icon: const Icon(Icons.swap_vert_rounded),
+              ),
             ),
             _StationInput(
               label: 'To',
@@ -270,7 +288,10 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                   labelText: 'Leave at',
                   prefixIcon: Icon(Icons.schedule_rounded),
                 ),
-                child: Text(_formatDateTime(_departure), style: const TextStyle(fontWeight: FontWeight.w700)),
+                child: Text(
+                  _formatDateTime(_departure),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
             const SizedBox(height: 18),
@@ -302,13 +323,17 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       ElevatedButton.icon(
         onPressed: _searching ? null : _findRoute,
         icon: _searching
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : const Icon(Icons.route_rounded),
         label: Text(_searching ? 'Finding best route...' : 'Find Best Route'),
       ),
       const SizedBox(height: 14),
       Text(
-        'Public transport timing is read from Malaysia Government GTFS Static data. Fare values are shown only when a stored official fare reference is available.',
+        'Train timing uses Malaysia Government GTFS Static data. Fare values use stored or project static fare references and are never generated randomly.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     ];
@@ -322,20 +347,31 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             children: [
               Icon(Icons.route_outlined, size: 48, color: AppColors.muted),
               SizedBox(height: 12),
-              Text('No route found', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              Text(
+                'No route found',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 18),
-        OutlinedButton(onPressed: () => setState(() => _showResult = false), child: const Text('Edit Search')),
+        OutlinedButton(
+          onPressed: () => setState(() => _showResult = false),
+          child: const Text('Edit Search'),
+        ),
       ];
     }
 
     final route = _route!;
-    final fare = _fare;
     final journey = _journey;
+    final fare = _fare;
+    final duration = journey?.arrival?.difference(_departure).inMinutes;
+
     return [
-      Text('${route.from.name} → ${route.to.name}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+      Text(
+        '${route.from.name} → ${route.to.name}',
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+      ),
       const SizedBox(height: 6),
       Text(_formatDateTime(_departure), style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 16),
@@ -346,21 +382,44 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.recommend_rounded, color: AppColors.primary),
+                const Icon(Icons.route_rounded, color: AppColors.primary),
                 const SizedBox(width: 8),
-                const Expanded(child: Text('Best Route', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-                StatusChip(route.transfers == 0 ? 'Direct' : '${route.transfers} transfer${route.transfers == 1 ? '' : 's'}', color: AppColors.primary),
+                const Expanded(
+                  child: Text(
+                    'Best Route',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                StatusChip(
+                  route.transfers == 0
+                      ? 'Direct'
+                      : '${route.transfers} transfer${route.transfers == 1 ? '' : 's'}',
+                  color: AppColors.primary,
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(route.modes.join(' + '), style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              route.modes.isEmpty ? 'Walking' : route.modes.join(' + '),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 8),
-            if (journey?.arrival != null)
-              Text('Estimated arrival: ${_formatTime(journey!.arrival!)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-            if (journey?.arrival != null)
-              Text('Journey from selected departure: ${journey!.arrival!.difference(_departure).inMinutes} min'),
+            if (journey?.arrival != null) ...[
+              Text(
+                'Estimated arrival: ${_formatTime(journey!.arrival!)}',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              Text('Total journey: $duration min'),
+            ] else
+              const Text(
+                'Complete arrival time is not shown until all public transport legs have matching timetable data.',
+              ),
             const SizedBox(height: 8),
-            Text(fare?.hasFare == true ? 'Estimated fare: ${fare!.formattedFare}' : 'Fare: official value unavailable for this journey'),
+            Text(
+              fare?.hasFare == true
+                  ? 'Estimated adult cash fare: ${fare!.formattedFare}'
+                  : 'Fare is not covered by the current verified reference set.',
+            ),
           ],
         ),
       ),
@@ -385,9 +444,14 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     ];
   }
 
-  List<Widget> _detailCards(RouteSearchResult route, RouteJourneyDetails? journey) {
-    final items = journey?.legs ?? route.groupedLegs.map((leg) => JourneyLegDetails(leg: leg)).toList();
+  List<Widget> _detailCards(
+    RouteSearchResult route,
+    RouteJourneyDetails? journey,
+  ) {
+    final items = journey?.legs ??
+        route.groupedLegs.map((leg) => JourneyLegDetails(leg: leg)).toList();
     final widgets = <Widget>[];
+
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final leg = item.leg;
@@ -397,27 +461,39 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                child: Icon(leg.mode == 'Walk' ? Icons.directions_walk_rounded : Icons.train_rounded, size: 20),
+                child: Icon(_legIcon(leg.mode), size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(leg.mode == 'Walk' ? 'Walk connection' : leg.line, style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(
+                      leg.mode == 'Walk' ? 'Walk connection' : leg.line,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
                     const SizedBox(height: 4),
                     Text('${leg.from} → ${leg.to}'),
                     if (item.departure != null && item.arrival != null) ...[
                       const SizedBox(height: 7),
-                      Text('${_formatTime(item.departure!)} → ${_formatTime(item.arrival!)} • ${item.durationMinutes} min'),
+                      Text(
+                        '${_formatTime(item.departure!)} → ${_formatTime(item.arrival!)} • ${item.durationMinutes} min',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ],
                     if (item.timingSource != null) ...[
                       const SizedBox(height: 5),
-                      Text(item.timingSource!, style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        item.timingSource!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                     if (item.departure == null && leg.mode != 'Walk') ...[
                       const SizedBox(height: 5),
-                      Text('No matching scheduled trip found in the Government GTFS feed for the selected time.', style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        'Timetable match unavailable for this transport leg.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ],
                 ),
@@ -426,18 +502,23 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
           ),
         ),
       );
+
       if (i < items.length - 1) {
+        final next = items[i + 1];
         widgets.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
             child: Row(
               children: [
-                const Icon(Icons.sync_alt_rounded, color: AppColors.warning),
+                Icon(_connectorIcon(item, next), color: AppColors.warning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Change at ${leg.to}',
-                    style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.warning),
+                    _connectorText(item, next),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.warning,
+                    ),
                   ),
                 ),
               ],
@@ -446,7 +527,51 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         );
       }
     }
+
     return widgets;
+  }
+
+  String _connectorText(JourneyLegDetails current, JourneyLegDetails next) {
+    final station = current.leg.to;
+    if (current.leg.mode == 'Walk' && next.leg.mode != 'Walk') {
+      final wait = _waitMinutes(current.arrival, next.departure);
+      return wait == null || wait <= 0
+          ? 'Enter ${next.leg.mode} at $station'
+          : 'Enter ${next.leg.mode} at $station • wait about $wait min';
+    }
+    if (current.leg.mode != 'Walk' && next.leg.mode == 'Walk') {
+      return 'Exit ${current.leg.mode} at $station and continue on foot';
+    }
+    if (current.leg.mode != 'Walk' && next.leg.mode != 'Walk') {
+      final wait = _waitMinutes(current.arrival, next.departure);
+      final base = current.leg.line == next.leg.line && current.leg.mode == next.leg.mode
+          ? 'Continue ${next.leg.mode} at $station'
+          : 'Change to ${next.leg.mode} at $station';
+      return wait == null || wait <= 0 ? base : '$base • wait about $wait min';
+    }
+    return 'Continue at $station';
+  }
+
+  int? _waitMinutes(DateTime? arrival, DateTime? departure) {
+    if (arrival == null || departure == null) return null;
+    final value = departure.difference(arrival).inMinutes;
+    return value < 0 ? null : value;
+  }
+
+  IconData _connectorIcon(JourneyLegDetails current, JourneyLegDetails next) {
+    if (current.leg.mode == 'Walk' && next.leg.mode != 'Walk') {
+      return Icons.login_rounded;
+    }
+    if (current.leg.mode != 'Walk' && next.leg.mode == 'Walk') {
+      return Icons.logout_rounded;
+    }
+    return Icons.sync_alt_rounded;
+  }
+
+  IconData _legIcon(String mode) {
+    if (mode == 'Walk') return Icons.directions_walk_rounded;
+    if (mode == 'KTM') return Icons.train_rounded;
+    return Icons.subway_rounded;
   }
 
   Widget _fareCard(FareEstimateInfo? fare) {
@@ -455,14 +580,20 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionTitle('Official Fare Estimation'),
+          const SectionTitle('Fare Estimate'),
           const SizedBox(height: 12),
-          Text(fare.hasFare ? fare.formattedFare : 'Fare unavailable', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+          Text(
+            fare.hasFare ? fare.formattedFare : fare.title,
+            style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 7),
           Text(fare.message),
           if (fare.sourceLabel != null) ...[
             const SizedBox(height: 7),
-            Text('Source: ${fare.sourceLabel}', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              'Source: ${fare.sourceLabel}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
           if (fare.options.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -483,15 +614,20 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
 
   Future<void> _openFareSource(FareLookupOption option) async {
     final opened = await launchUrl(option.url, mode: LaunchMode.externalApplication);
-    if (!opened) _message('Unable to open the official fare page.');
+    if (!opened) _message('Unable to open the fare source.');
   }
 }
 
 class RouteJourneyDetails {
-  const RouteJourneyDetails({required this.legs, required this.arrival});
+  const RouteJourneyDetails({
+    required this.legs,
+    required this.arrival,
+    required this.complete,
+  });
 
   final List<JourneyLegDetails> legs;
   final DateTime? arrival;
+  final bool complete;
 }
 
 class JourneyLegDetails {
@@ -530,8 +666,11 @@ class _StationPickerState extends State<_StationPicker> {
     final query = _query.trim().toLowerCase();
     final stations = routeStations.where((station) {
       if (station.name == widget.excluded?.name) return false;
-      return query.isEmpty || station.name.toLowerCase().contains(query) || station.mode.toLowerCase().contains(query);
+      return query.isEmpty ||
+          station.name.toLowerCase().contains(query) ||
+          station.mode.toLowerCase().contains(query);
     }).toList();
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: Column(
@@ -541,23 +680,32 @@ class _StationPickerState extends State<_StationPicker> {
             child: TextField(
               autofocus: true,
               onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), hintText: 'Search station'),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: 'Search station',
+              ),
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              itemCount: stations.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final station = stations[index];
-                return ListTile(
-                  leading: const Icon(Icons.train_rounded),
-                  title: Text(station.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text(station.mode),
-                  onTap: () => Navigator.pop(context, station),
-                );
-              },
-            ),
+            child: stations.isEmpty
+                ? const Center(child: Text('No station found'))
+                : ListView.separated(
+                    itemCount: stations.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final station = stations[index];
+                      return ListTile(
+                        leading: const Icon(Icons.train_rounded),
+                        title: Text(
+                          station.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(station.mode),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.pop(context, station),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -585,19 +733,34 @@ class _StationInput extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: InputDecorator(
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon), suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded)),
-        child: Text(station?.name ?? hint, style: TextStyle(fontWeight: station == null ? FontWeight.normal : FontWeight.w700)),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded),
+        ),
+        child: Text(
+          station?.name ?? hint,
+          style: TextStyle(
+            fontWeight: station == null ? FontWeight.normal : FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
 }
 
 String _formatTime(DateTime value) {
-  final hour = value.hour == 0 ? 12 : value.hour > 12 ? value.hour - 12 : value.hour;
+  final hour = value.hour == 0
+      ? 12
+      : value.hour > 12
+          ? value.hour - 12
+          : value.hour;
   final minute = value.minute.toString().padLeft(2, '0');
   return '$hour:$minute ${value.hour >= 12 ? 'PM' : 'AM'}';
 }
 
 String _formatDateTime(DateTime value) {
-  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year} • ${_formatTime(value)}';
+  return '${value.day.toString().padLeft(2, '0')}/'
+      '${value.month.toString().padLeft(2, '0')}/'
+      '${value.year} • ${_formatTime(value)}';
 }
