@@ -9,12 +9,14 @@ class RouteTimingInfo {
     required this.arrival,
     required this.durationMinutes,
     required this.source,
+    required this.usesCalendarFallback,
   });
 
   final DateTime departure;
   final DateTime arrival;
   final int durationMinutes;
   final String source;
+  final bool usesCalendarFallback;
 }
 
 class RouteTimingService {
@@ -31,9 +33,8 @@ class RouteTimingService {
     required DateTime requestedDeparture,
   }) async {
     if (mode == 'MRT' || mode == 'LRT') {
-      final archive = await _rapidRail();
       return _findInArchive(
-        archive: archive,
+        archive: await _rapidRail(),
         from: from,
         to: to,
         requestedDeparture: requestedDeparture,
@@ -41,9 +42,8 @@ class RouteTimingService {
       );
     }
     if (mode == 'KTM') {
-      final archive = await _ktmb();
       return _findInArchive(
-        archive: archive,
+        archive: await _ktmb(),
         from: from,
         to: to,
         requestedDeparture: requestedDeparture,
@@ -63,7 +63,9 @@ class RouteTimingService {
 
   Future<Archive> _ktmb() async {
     if (_ktmbArchive != null) return _ktmbArchive!;
-    _ktmbArchive = await _download(Uri.parse('https://api.data.gov.my/gtfs-static/ktmb'));
+    _ktmbArchive = await _download(
+      Uri.parse('https://api.data.gov.my/gtfs-static/ktmb'),
+    );
     return _ktmbArchive!;
   }
 
@@ -85,12 +87,13 @@ class RouteTimingService {
     final stopsFile = _findFile(archive, 'stops.txt');
     final stopTimesFile = _findFile(archive, 'stop_times.txt');
     final tripsFile = _findFile(archive, 'trips.txt');
-    if (stopsFile == null || stopTimesFile == null || tripsFile == null) return null;
+    if (stopsFile == null || stopTimesFile == null || tripsFile == null) {
+      return null;
+    }
 
-    final stopRows = _parseCsv(_text(stopsFile));
     final fromIds = <String>{};
     final toIds = <String>{};
-    for (final row in stopRows) {
+    for (final row in _parseCsv(_text(stopsFile))) {
       final id = (row['stop_id'] ?? '').trim();
       final name = _normalise(row['stop_name'] ?? '');
       if (id.isEmpty) continue;
@@ -99,54 +102,72 @@ class RouteTimingService {
     }
     if (fromIds.isEmpty || toIds.isEmpty) return null;
 
-    final validTrips = _validTripIds(
+    final activeTripIds = _activeTripIds(
       archive: archive,
       tripsFile: tripsFile,
       date: requestedDeparture,
     );
+    final useCalendarFallback = activeTripIds != null && activeTripIds.isEmpty;
+
     final byTrip = <String, List<Map<String, String>>>{};
     for (final row in _parseCsv(_text(stopTimesFile))) {
       final stopId = (row['stop_id'] ?? '').trim();
       if (!fromIds.contains(stopId) && !toIds.contains(stopId)) continue;
       final tripId = (row['trip_id'] ?? '').trim();
-      if (tripId.isEmpty || (validTrips != null && !validTrips.contains(tripId))) continue;
+      if (tripId.isEmpty) continue;
+      if (!useCalendarFallback &&
+          activeTripIds != null &&
+          !activeTripIds.contains(tripId)) {
+        continue;
+      }
       byTrip.putIfAbsent(tripId, () => []).add(row);
     }
 
-    final requestedSeconds = requestedDeparture.hour * 3600 + requestedDeparture.minute * 60;
+    final requestedSeconds = requestedDeparture.hour * 3600 +
+        requestedDeparture.minute * 60 +
+        requestedDeparture.second;
     ({int departure, int arrival})? best;
 
     for (final rows in byTrip.values) {
       Map<String, String>? origin;
       Map<String, String>? destination;
+
       for (final row in rows) {
         final stopId = (row['stop_id'] ?? '').trim();
         final sequence = int.tryParse((row['stop_sequence'] ?? '').trim()) ?? -1;
+
         if (fromIds.contains(stopId)) {
-          if (origin == null || sequence < (int.tryParse(origin['stop_sequence'] ?? '') ?? 999999)) {
-            origin = row;
-          }
+          final oldSequence = int.tryParse(origin?['stop_sequence'] ?? '') ?? 999999;
+          if (origin == null || sequence < oldSequence) origin = row;
         }
+
         if (toIds.contains(stopId)) {
-          if (destination == null || sequence > (int.tryParse(destination['stop_sequence'] ?? '') ?? -1)) {
-            destination = row;
-          }
+          final oldSequence = int.tryParse(destination?['stop_sequence'] ?? '') ?? -1;
+          if (destination == null || sequence > oldSequence) destination = row;
         }
       }
+
       if (origin == null || destination == null) continue;
       final originSequence = int.tryParse(origin['stop_sequence'] ?? '') ?? -1;
       final destinationSequence = int.tryParse(destination['stop_sequence'] ?? '') ?? -1;
       if (destinationSequence <= originSequence) continue;
-      final departure = _seconds(origin['departure_time'] ?? origin['arrival_time'] ?? '');
-      final arrival = _seconds(destination['arrival_time'] ?? destination['departure_time'] ?? '');
+
+      final departure = _seconds(
+        origin['departure_time'] ?? origin['arrival_time'] ?? '',
+      );
+      final arrival = _seconds(
+        destination['arrival_time'] ?? destination['departure_time'] ?? '',
+      );
       if (departure == null || arrival == null || arrival <= departure) continue;
       if (departure < requestedSeconds) continue;
+
       if (best == null || departure < best.departure) {
         best = (departure: departure, arrival: arrival);
       }
     }
 
     if (best == null) return null;
+
     final departure = _dateWithSeconds(requestedDeparture, best.departure);
     final arrival = _dateWithSeconds(requestedDeparture, best.arrival);
     return RouteTimingInfo(
@@ -154,10 +175,11 @@ class RouteTimingService {
       arrival: arrival,
       durationMinutes: ((best.arrival - best.departure) / 60).ceil(),
       source: source,
+      usesCalendarFallback: useCalendarFallback,
     );
   }
 
-  Set<String>? _validTripIds({
+  Set<String>? _activeTripIds({
     required Archive archive,
     required ArchiveFile tripsFile,
     required DateTime date,
@@ -167,6 +189,8 @@ class RouteTimingService {
     if (calendarFile == null && calendarDatesFile == null) return null;
 
     final activeServices = <String>{};
+    final target = _dateKey(date);
+
     if (calendarFile != null) {
       final weekday = const [
         'monday',
@@ -177,31 +201,34 @@ class RouteTimingService {
         'saturday',
         'sunday',
       ][date.weekday - 1];
-      final target = _dateKey(date);
+
       for (final row in _parseCsv(_text(calendarFile))) {
-        final start = row['start_date'] ?? '';
-        final end = row['end_date'] ?? '';
-        if ((row[weekday] ?? '0') == '1' && target.compareTo(start) >= 0 && target.compareTo(end) <= 0) {
-          activeServices.add((row['service_id'] ?? '').trim());
+        final start = (row['start_date'] ?? '').trim();
+        final end = (row['end_date'] ?? '').trim();
+        if ((row[weekday] ?? '0').trim() == '1' &&
+            target.compareTo(start) >= 0 &&
+            target.compareTo(end) <= 0) {
+          final serviceId = (row['service_id'] ?? '').trim();
+          if (serviceId.isNotEmpty) activeServices.add(serviceId);
         }
       }
     }
 
     if (calendarDatesFile != null) {
-      final target = _dateKey(date);
       for (final row in _parseCsv(_text(calendarDatesFile))) {
         if ((row['date'] ?? '').trim() != target) continue;
         final serviceId = (row['service_id'] ?? '').trim();
-        if ((row['exception_type'] ?? '').trim() == '1') activeServices.add(serviceId);
-        if ((row['exception_type'] ?? '').trim() == '2') activeServices.remove(serviceId);
+        final type = (row['exception_type'] ?? '').trim();
+        if (type == '1' && serviceId.isNotEmpty) activeServices.add(serviceId);
+        if (type == '2') activeServices.remove(serviceId);
       }
     }
 
-    if (activeServices.isEmpty) return <String>{};
     final result = <String>{};
     for (final row in _parseCsv(_text(tripsFile))) {
       if (activeServices.contains((row['service_id'] ?? '').trim())) {
-        result.add((row['trip_id'] ?? '').trim());
+        final tripId = (row['trip_id'] ?? '').trim();
+        if (tripId.isNotEmpty) result.add(tripId);
       }
     }
     return result;
@@ -209,6 +236,7 @@ class RouteTimingService {
 
   bool _stationMatches(String normalisedGtfsName, String appName) {
     final target = _normalise(appName);
+    if (target.isEmpty) return false;
     return normalisedGtfsName == target ||
         normalisedGtfsName.contains(target) ||
         target.contains(normalisedGtfsName);
@@ -217,8 +245,10 @@ class RouteTimingService {
   String _normalise(String value) {
     return value
         .toLowerCase()
-        .replaceAll(RegExp(r'\b(mrt|lrt|ktm|komuter|station|stesen)\b'), '')
+        .replaceAll(RegExp(r'\b(mrt|lrt|ktm|komuter|station|stesen|platform)\b'), '')
+        .replaceAll(RegExp(r'\([^)]*\)'), ' ')
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
 
@@ -235,15 +265,20 @@ class RouteTimingService {
   DateTime _dateWithSeconds(DateTime date, int seconds) {
     final dayOffset = seconds ~/ 86400;
     final remainder = seconds % 86400;
-    return DateTime(date.year, date.month, date.day)
-        .add(Duration(days: dayOffset, seconds: remainder));
+    return DateTime(date.year, date.month, date.day).add(
+      Duration(days: dayOffset, seconds: remainder),
+    );
   }
 
   String _dateKey(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
+    return '${date.year.toString().padLeft(4, '0')}'
+        '${date.month.toString().padLeft(2, '0')}'
+        '${date.day.toString().padLeft(2, '0')}';
   }
 
-  String _text(ArchiveFile file) => utf8.decode(file.content, allowMalformed: true);
+  String _text(ArchiveFile file) {
+    return utf8.decode(file.content, allowMalformed: true);
+  }
 
   ArchiveFile? _findFile(Archive archive, String name) {
     for (final file in archive.files) {
@@ -253,13 +288,20 @@ class RouteTimingService {
   }
 
   List<Map<String, String>> _parseCsv(String content) {
-    final lines = const LineSplitter().convert(content).where((line) => line.trim().isNotEmpty).toList();
+    final lines = const LineSplitter()
+        .convert(content)
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return const [];
+
     final headers = _parseCsvLine(lines.first);
     final rows = <Map<String, String>>[];
     for (final line in lines.skip(1)) {
       final values = _parseCsvLine(line);
-      rows.add({for (var i = 0; i < headers.length; i++) headers[i]: i < values.length ? values[i] : ''});
+      rows.add({
+        for (var i = 0; i < headers.length; i++)
+          headers[i]: i < values.length ? values[i] : '',
+      });
     }
     return rows;
   }
@@ -268,6 +310,7 @@ class RouteTimingService {
     final values = <String>[];
     final buffer = StringBuffer();
     var quoted = false;
+
     for (var i = 0; i < line.length; i++) {
       final char = line[i];
       if (char == '"') {
@@ -284,6 +327,7 @@ class RouteTimingService {
         buffer.write(char);
       }
     }
+
     values.add(buffer.toString());
     return values;
   }
