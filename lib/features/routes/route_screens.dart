@@ -1013,7 +1013,11 @@ class _ModeStatTile extends StatelessWidget {
 }
 
 Future<void> _openFareSource(BuildContext context, FareLookupOption option) async {
-  final opened = await launchUrl(option.url, mode: LaunchMode.externalApplication);
+  final opened = await launchUrl(
+        option.url,
+        mode: LaunchMode.externalApplication,
+      ) ||
+      await launchUrl(option.url);
   if (!opened && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Unable to open the official fare page.')),

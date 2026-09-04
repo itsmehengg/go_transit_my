@@ -1081,10 +1081,10 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     FareLookupOption option,
   ) async {
     final opened = await launchUrl(
-      option.url,
-      mode:
-          LaunchMode.externalApplication,
-    );
+          option.url,
+          mode: LaunchMode.externalApplication,
+        ) ||
+        await launchUrl(option.url);
 
     if (!opened) {
       _message(

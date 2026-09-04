@@ -1,11 +1,10 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
-import '../stations/gtfs_static_service.dart';
 import '../stations/location_service.dart';
+import 'government_gtfs_cache.dart';
 import 'station_catalog.dart';
 
 class AccessStep {
@@ -57,17 +56,11 @@ class CurrentLocationAccessResult {
 class CurrentLocationRouteService {
   CurrentLocationRouteService({
     LocationService? locationService,
-    GtfsStaticService? gtfsService,
-    http.Client? client,
-  })  : _locationService = locationService ?? LocationService(),
-        _gtfsService = gtfsService ?? GtfsStaticService(),
-        _client = client ?? http.Client();
+  }) : _locationService = locationService ?? LocationService();
 
   final LocationService _locationService;
-  final GtfsStaticService _gtfsService;
-  final http.Client _client;
 
-  Archive? _busArchive;
+  final GovernmentGtfsCache _gtfsCache = GovernmentGtfsCache.instance;
 
   Future<CurrentLocationAccessResult> findAccessPlans({
     required String transport,
@@ -75,9 +68,9 @@ class CurrentLocationRouteService {
     int limit = 14,
   }) async {
     final current = await _locationService.getCurrentLocation();
-    final snapshot = await _gtfsService.fetchAllStatic();
+    final governmentStops = await _gtfsCache.stops();
 
-    final railStops = snapshot.stops.where((stop) {
+    final railStops = governmentStops.where((stop) {
       if (transport == 'KTM') return stop.agency == 'KTMB';
       if (transport == 'MRT' || transport == 'LRT') {
         return stop.agency == 'Rapid Rail KL';
@@ -122,7 +115,7 @@ class CurrentLocationRouteService {
 
   List<BoardingAccessPlan> _directWalkPlans({
     required LatLng current,
-    required List<StaticGtfsStop> railStops,
+    required List<GovernmentGtfsStop> railStops,
     required DateTime departure,
   }) {
     final plans = <BoardingAccessPlan>[];
@@ -168,10 +161,10 @@ class CurrentLocationRouteService {
 
   Future<List<BoardingAccessPlan>> _busAccessPlans({
     required LatLng current,
-    required List<StaticGtfsStop> railStops,
+    required List<GovernmentGtfsStop> railStops,
     required DateTime departure,
   }) async {
-    final archive = await _rapidBusArchive();
+    final archive = await _gtfsCache.archive('Rapid Bus KL');
     final stopsFile = _findFile(archive, 'stops.txt');
     final stopTimesFile = _findFile(archive, 'stop_times.txt');
     final tripsFile = _findFile(archive, 'trips.txt');
@@ -421,25 +414,6 @@ class CurrentLocationRouteService {
 
     plans.sort((a, b) => a.scoreMinutes.compareTo(b.scoreMinutes));
     return plans.take(18).toList();
-  }
-
-  Future<Archive> _rapidBusArchive() async {
-    if (_busArchive != null) return _busArchive!;
-
-    final response = await _client
-        .get(
-          Uri.parse(
-            'https://api.data.gov.my/gtfs-static/prasarana?category=rapid-bus-kl',
-          ),
-        )
-        .timeout(const Duration(seconds: 30));
-
-    if (response.statusCode != 200) {
-      throw Exception('Rapid Bus GTFS HTTP ${response.statusCode}');
-    }
-
-    _busArchive = ZipDecoder().decodeBytes(response.bodyBytes);
-    return _busArchive!;
   }
 
   int _walkingMinutes(double metres) {
