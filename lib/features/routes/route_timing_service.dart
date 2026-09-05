@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
-import 'package:http/http.dart' as http;
+import 'government_gtfs_cache.dart';
 
 class RouteTimingInfo {
   const RouteTimingInfo({
@@ -20,11 +20,9 @@ class RouteTimingInfo {
 }
 
 class RouteTimingService {
-  RouteTimingService({http.Client? client}) : _client = client ?? http.Client();
+  RouteTimingService();
 
-  final http.Client _client;
-  Archive? _rapidRailArchive;
-  Archive? _ktmbArchive;
+  final GovernmentGtfsCache _gtfsCache = GovernmentGtfsCache.instance;
 
   Future<RouteTimingInfo?> findTiming({
     required String mode,
@@ -53,28 +51,12 @@ class RouteTimingService {
     return null;
   }
 
-  Future<Archive> _rapidRail() async {
-    if (_rapidRailArchive != null) return _rapidRailArchive!;
-    _rapidRailArchive = await _download(
-      Uri.parse('https://api.data.gov.my/gtfs-static/prasarana?category=rapid-rail-kl'),
-    );
-    return _rapidRailArchive!;
+  Future<Archive> _rapidRail() {
+    return _gtfsCache.archive('Rapid Rail KL');
   }
 
-  Future<Archive> _ktmb() async {
-    if (_ktmbArchive != null) return _ktmbArchive!;
-    _ktmbArchive = await _download(
-      Uri.parse('https://api.data.gov.my/gtfs-static/ktmb'),
-    );
-    return _ktmbArchive!;
-  }
-
-  Future<Archive> _download(Uri uri) async {
-    final response = await _client.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      throw Exception('Government GTFS HTTP ${response.statusCode}');
-    }
-    return ZipDecoder().decodeBytes(response.bodyBytes);
+  Future<Archive> _ktmb() {
+    return _gtfsCache.archive('KTMB');
   }
 
   RouteTimingInfo? _findInArchive({

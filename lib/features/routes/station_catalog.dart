@@ -1,31 +1,25 @@
+import 'government_route_data_service.dart';
+
 class RouteStation {
-  const RouteStation({required this.name, required this.mode});
+  const RouteStation({
+    required this.name,
+    required this.mode,
+  });
 
   final String name;
   final String mode;
 }
 
-const routeStations = <RouteStation>[
-  RouteStation(name: 'KL Sentral', mode: 'KTM'),
-  RouteStation(name: 'Pasar Seni', mode: 'MRT'),
-  RouteStation(name: 'Bukit Bintang', mode: 'MRT'),
-  RouteStation(name: 'Muzium Negara', mode: 'MRT'),
-  RouteStation(name: 'Merdeka', mode: 'MRT'),
-  RouteStation(name: 'Cochrane', mode: 'MRT'),
-  RouteStation(name: 'Maluri', mode: 'MRT'),
-  RouteStation(name: 'Taman Midah', mode: 'MRT'),
-  RouteStation(name: 'Kajang', mode: 'MRT'),
-  RouteStation(name: 'KLCC', mode: 'LRT'),
-  RouteStation(name: 'Masjid Jamek', mode: 'LRT'),
-  RouteStation(name: 'Dang Wangi', mode: 'LRT'),
-  RouteStation(name: 'Ampang Park', mode: 'LRT'),
-  RouteStation(name: 'Bangsar', mode: 'LRT'),
-  RouteStation(name: 'Abdullah Hukum', mode: 'LRT'),
-  RouteStation(name: 'Universiti', mode: 'LRT'),
-  RouteStation(name: 'Taman Jaya', mode: 'LRT'),
-  RouteStation(name: 'Subang Jaya', mode: 'KTM'),
-  RouteStation(name: 'Mid Valley', mode: 'KTM'),
-  RouteStation(name: 'Bandar Tasik Selatan', mode: 'KTM'),
-  RouteStation(name: 'Serdang', mode: 'KTM'),
-  RouteStation(name: 'Batu Caves', mode: 'KTM'),
-];
+List<RouteStation> routeStations = <RouteStation>[];
+
+Future<List<RouteStation>> loadGovernmentRouteStations({
+  bool refresh = false,
+}) async {
+  if (refresh) {
+    GovernmentRouteDataService.instance.refresh();
+  }
+
+  final data = await GovernmentRouteDataService.instance.load();
+  routeStations = List<RouteStation>.from(data.stations);
+  return routeStations;
+}
