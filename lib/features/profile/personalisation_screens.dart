@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_widgets.dart';
+import '../alerts/peak_hour_popup_service.dart';
 import 'personalisation_service.dart';
 
 class FavouriteStationsScreen extends StatelessWidget {
@@ -173,6 +174,43 @@ class NotificationSettingsScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.warning,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Peak hour demo alert',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Show the static historical crowd alert immediately for presentation testing.',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => _showDemoPeakAlert(context),
+                    icon: const Icon(Icons.notifications_active_rounded),
+                    label: const Text('Test Peak Alert'),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const Text(
               'This preference is saved on this device.',
@@ -180,6 +218,145 @@ class NotificationSettingsScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showDemoPeakAlert(BuildContext context) async {
+    final alert = PeakHourPopupService.instance.demoAlert();
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.notifications_active_rounded,
+            color: AppColors.primary,
+            size: 34,
+          ),
+          title: Text(alert.title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(alert.message),
+                const SizedBox(height: 14),
+                _NotificationDemoInfo(
+                  icon: Icons.schedule_rounded,
+                  label: 'Expected peak window',
+                  value: alert.peakWindow,
+                ),
+                const SizedBox(height: 8),
+                _NotificationDemoInfo(
+                  icon: Icons.groups_rounded,
+                  label: 'Highest expected crowd',
+                  value: '${alert.highestCrowdPercent}%',
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Stations to watch',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                for (final station in alert.stations)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppColors.warning.withOpacity(0.16),
+                          child: Text(
+                            '${station.crowdPercent}%',
+                            style: const TextStyle(
+                              color: AppColors.text,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                station.station,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              Text(
+                                station.reason,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  alert.advice,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  alert.sourceLabel,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NotificationDemoInfo extends StatelessWidget {
+  const _NotificationDemoInfo({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
       ),
     );
   }
