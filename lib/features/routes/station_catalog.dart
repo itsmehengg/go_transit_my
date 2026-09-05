@@ -1,4 +1,4 @@
-class RouteStation {
+ class RouteStation {
   const RouteStation({required this.name, required this.mode});
 
   final String name;

@@ -43,8 +43,51 @@ class _TransportAnalyticsScreenState extends State<TransportAnalyticsScreen> {
 }
 
 class _Title extends StatelessWidget{const _Title(this.a,this.b);final String a,b;@override Widget build(BuildContext c)=>Padding(padding:const EdgeInsets.only(top:22,bottom:10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(a,style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),Text(b,style:const TextStyle(color:AppColors.muted,fontSize:12))]));}
-class _Metric extends StatelessWidget{const _Metric(this.label,this.value,this.icon);final String label,value;final IconData icon;@override Widget build(BuildContext c)=>Card(elevation:0,child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:AppColors.primary),const Spacer(),Text(value,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),Text(label,style:const TextStyle(color:AppColors.muted,fontSize:12))])));}
-class _RankRow extends StatelessWidget{const _RankRow(this.name,this.value,this.max);final String name;final int value,max;@override Widget build(BuildContext c)=>Card(elevation:0,child:Padding(padding:const EdgeInsets.all(12),child:Column(children:[Row(children:[Expanded(child:Text(name,style:const TextStyle(fontWeight:FontWeight.w700))),Text(_n(value),style:const TextStyle(fontWeight:FontWeight.w900))]),const SizedBox(height:6),LinearProgressIndicator(value:max==0?0:value/max,minHeight:7,borderRadius:BorderRadius.circular(9))])));}
+class _Metric extends StatelessWidget {
+  const _Metric(this.label, this.value, this.icon);
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 108),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: AppColors.primary),
+              const SizedBox(height: 18),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}class _RankRow extends StatelessWidget{const _RankRow(this.name,this.value,this.max);final String name;final int value,max;@override Widget build(BuildContext c)=>Card(elevation:0,child:Padding(padding:const EdgeInsets.all(12),child:Column(children:[Row(children:[Expanded(child:Text(name,style:const TextStyle(fontWeight:FontWeight.w700))),Text(_n(value),style:const TextStyle(fontWeight:FontWeight.w900))]),const SizedBox(height:6),LinearProgressIndicator(value:max==0?0:value/max,minHeight:7,borderRadius:BorderRadius.circular(9))])));}
 class _Bars extends StatelessWidget{const _Bars({required this.values,required this.labels});final List<int> values;final List<String> labels;@override Widget build(BuildContext c){final max=values.fold<int>(1,(a,b)=>a>b?a:b);return Card(elevation:0,child:Padding(padding:const EdgeInsets.fromLTRB(10,16,10,10),child:SizedBox(height:180,child:Row(crossAxisAlignment:CrossAxisAlignment.end,children:List.generate(values.length,(i)=>Expanded(child:Padding(padding:const EdgeInsets.symmetric(horizontal:1.5),child:Column(mainAxisAlignment:MainAxisAlignment.end,children:[Expanded(child:Align(alignment:Alignment.bottomCenter,child:FractionallySizedBox(heightFactor:math.max(.03,values[i]/max),child:Container(decoration:BoxDecoration(color:AppColors.primary,borderRadius:const BorderRadius.vertical(top:Radius.circular(4))))))),const SizedBox(height:4),Text(labels[i],style:const TextStyle(fontSize:8,color:AppColors.muted))]))))))));}}
 class _FlowNetwork extends StatelessWidget{const _FlowNetwork({required this.origin,required this.flows});final String origin;final List<FlowPair> flows;@override Widget build(BuildContext c)=>Card(elevation:0,child:SizedBox(height:300,child:flows.isEmpty?const Center(child:Text('No flow data available')):Stack(children:[Center(child:Container(width:120,padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:AppColors.primary,borderRadius:BorderRadius.circular(18)),child:Text(origin,textAlign:TextAlign.center,maxLines:3,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w900)))),...List.generate(flows.length,(i){final a=-math.pi/2+2*math.pi*i/flows.length;return Align(alignment:Alignment(math.cos(a)*.85,math.sin(a)*.8),child:Container(width:92,padding:const EdgeInsets.all(8),decoration:BoxDecoration(color:Theme.of(c).colorScheme.surface,border:Border.all(color:AppColors.primary.withValues(alpha:.35)),borderRadius:BorderRadius.circular(14)),child:Text('${flows[i].destination}\n${_n(flows[i].ridership)}',textAlign:TextAlign.center,maxLines:3,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:10,fontWeight:FontWeight.w800))));})])));}
 class _Heatmap extends StatelessWidget{const _Heatmap(this.v);final List<List<int>> v;@override Widget build(BuildContext c){final max=v.expand((e)=>e).fold<int>(1,(a,b)=>a>b?a:b);const d=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];return Card(elevation:0,child:Padding(padding:const EdgeInsets.all(12),child:Column(children:List.generate(7,(day)=>Row(children:[SizedBox(width:34,child:Text(d[day],style:const TextStyle(fontSize:10,fontWeight:FontWeight.w700))),...List.generate(8,(g){final t=v[day].skip(g*3).take(3).fold<int>(0,(a,b)=>a+b);return Expanded(child:Container(height:28,margin:const EdgeInsets.all(1),decoration:BoxDecoration(color:AppColors.primary.withValues(alpha:.08+math.min(.86,t/(max*3))),borderRadius:BorderRadius.circular(4))));})])))));}}
