@@ -35,8 +35,6 @@ class TransportAnalyticsService {
   }
 
   Future<KomuterAnalytics> _loadKomuterSafe() async {
-    // The 2026 Komuter CSV is very large and storage.data.gov.my does not
-    // provide browser CORS headers, so Flutter Web cannot safely load it.
     if (kIsWeb) return _fallbackKomuter();
 
     try {
