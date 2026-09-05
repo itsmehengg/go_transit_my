@@ -626,81 +626,107 @@ class _LiveVehicleMap extends StatelessWidget {
     final center = station?.point ??
         data.userLocation ??
         const LatLng(3.1390, 101.6869);
+    final mapController = MapController();
 
     return Column(
       children: [
         Expanded(
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: center,
-              initialZoom: station == null ? 11 : 14,
-            ),
+          child: Stack(
             children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.go_transit_my',
-              ),
-              MarkerLayer(
-                markers: [
-                  if (data.userLocation != null)
-                    Marker(
-                      point: data.userLocation!,
-                      width: 46,
-                      height: 46,
-                      child: const Tooltip(
-                        message: 'Your location',
-                        child: Icon(
-                          Icons.my_location_rounded,
-                          color: AppColors.primary,
-                          size: 32,
-                        ),
-                      ),
-                    ),
-                  if (station != null)
-                    Marker(
-                      point: station!.point,
-                      width: 50,
-                      height: 50,
-                      child: Tooltip(
-                        message: station!.name,
-                        child: const Icon(
-                          Icons.location_on_rounded,
-                          color: AppColors.danger,
-                          size: 38,
-                        ),
-                      ),
-                    ),
-                  ...data.vehicleSnapshot.vehicles.map(
-                    (vehicle) => Marker(
-                      point: vehicle.point,
-                      width: 42,
-                      height: 42,
-                      child: Tooltip(
-                        message:
-                            '${vehicle.feedName}${vehicle.routeId == null ? '' : ' • ${vehicle.routeId}'}${vehicle.timestamp == null ? '' : ' • ${_timeAgo(vehicle.timestamp!)}'}',
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _vehicleColor(vehicle.type),
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: Icon(
-                            vehicle.type == LiveVehicleType.bus
-                                ? Icons.directions_bus_filled_rounded
-                                : Icons.train_rounded,
-                            color: Colors.white,
-                            size: 21,
+              FlutterMap(
+                mapController: mapController,
+                options: MapOptions(
+                  initialCenter: center,
+                  initialZoom: station == null ? 11 : 14,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.go_transit_my',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      if (data.userLocation != null)
+                        Marker(
+                          point: data.userLocation!,
+                          width: 46,
+                          height: 46,
+                          child: const Tooltip(
+                            message: 'Your location',
+                            child: Icon(
+                              Icons.my_location_rounded,
+                              color: AppColors.primary,
+                              size: 32,
+                            ),
                           ),
                         ),
+                      if (station != null)
+                        Marker(
+                          point: station!.point,
+                          width: 50,
+                          height: 50,
+                          child: Tooltip(
+                            message: station!.name,
+                            child: const Icon(
+                              Icons.location_on_rounded,
+                              color: AppColors.danger,
+                              size: 38,
+                            ),
+                          ),
+                        ),
+                      ...data.vehicleSnapshot.vehicles.map(
+                        (vehicle) => Marker(
+                          point: vehicle.point,
+                          width: 42,
+                          height: 42,
+                          child: Tooltip(
+                            message:
+                                '${vehicle.feedName}${vehicle.routeId == null ? '' : ' • ${vehicle.routeId}'}${vehicle.timestamp == null ? '' : ' • ${_timeAgo(vehicle.timestamp!)}'}',
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _vehicleColor(vehicle.type),
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: Icon(
+                                vehicle.type == LiveVehicleType.bus
+                                    ? Icons.directions_bus_filled_rounded
+                                    : Icons.train_rounded,
+                                color: Colors.white,
+                                size: 21,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                  const RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('OpenStreetMap contributors'),
+                    ],
                   ),
                 ],
               ),
-              const RichAttributionWidget(
-                attributions: [
-                  TextSourceAttribution('OpenStreetMap contributors'),
-                ],
+              Positioned(
+                right: 14,
+                bottom: 14,
+                child: _MapZoomControls(
+                  onZoomIn: () {
+                    final camera = mapController.camera;
+                    mapController.move(
+                      camera.center,
+                      (camera.zoom + 1).clamp(3, 18).toDouble(),
+                    );
+                  },
+                  onZoomOut: () {
+                    final camera = mapController.camera;
+                    mapController.move(
+                      camera.center,
+                      (camera.zoom - 1).clamp(3, 18).toDouble(),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -755,6 +781,7 @@ class _StationMap extends StatelessWidget {
   Widget build(BuildContext context) {
     final center = userLocation ??
         (stops.isNotEmpty ? stops.first.point : const LatLng(3.1390, 101.6869));
+    final mapController = MapController();
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -765,6 +792,7 @@ class _StationMap extends StatelessWidget {
           child: Stack(
             children: [
               FlutterMap(
+                mapController: mapController,
                 options: MapOptions(
                   initialCenter: center,
                   initialZoom: userLocation == null ? 10.5 : 13,
@@ -896,6 +924,26 @@ class _StationMap extends StatelessWidget {
                   ),
                 ),
               ),
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: _MapZoomControls(
+                  onZoomIn: () {
+                    final camera = mapController.camera;
+                    mapController.move(
+                      camera.center,
+                      (camera.zoom + 1).clamp(3, 18).toDouble(),
+                    );
+                  },
+                  onZoomOut: () {
+                    final camera = mapController.camera;
+                    mapController.move(
+                      camera.center,
+                      (camera.zoom - 1).clamp(3, 18).toDouble(),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -974,6 +1022,45 @@ Color _vehicleColor(LiveVehicleType type) {
     LiveVehicleType.train => AppColors.success,
     LiveVehicleType.rail => const Color(0xFF7C3AED),
   };
+}
+
+class _MapZoomControls extends StatelessWidget {
+  const _MapZoomControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: .94),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Zoom in',
+            onPressed: onZoomIn,
+            icon: const Icon(Icons.add_rounded),
+          ),
+          Container(
+            width: 28,
+            height: 1,
+            color: AppColors.line,
+          ),
+          IconButton(
+            tooltip: 'Zoom out',
+            onPressed: onZoomOut,
+            icon: const Icon(Icons.remove_rounded),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 String _formatDistance(double metres) {

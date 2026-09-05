@@ -1173,6 +1173,26 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
                   ),
                 ),
               ),
+            Positioned(
+              right: 14,
+              bottom: 14,
+              child: _MapZoomControls(
+                onZoomIn: () {
+                  final camera = _mapController.camera;
+                  _mapController.move(
+                    camera.center,
+                    (camera.zoom + 1).clamp(3, 18).toDouble(),
+                  );
+                },
+                onZoomOut: () {
+                  final camera = _mapController.camera;
+                  _mapController.move(
+                    camera.center,
+                    (camera.zoom - 1).clamp(3, 18).toDouble(),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -1768,6 +1788,45 @@ class _CurrentLocationMarker extends StatelessWidget {
             border: Border.all(color: Colors.white, width: 4),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MapZoomControls extends StatelessWidget {
+  const _MapZoomControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.94),
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          IconButton(
+            tooltip: 'Zoom in',
+            onPressed: onZoomIn,
+            icon: const Icon(Icons.add_rounded),
+          ),
+          Container(
+            width: 28,
+            height: 1,
+            color: AppColors.line,
+          ),
+          IconButton(
+            tooltip: 'Zoom out',
+            onPressed: onZoomOut,
+            icon: const Icon(Icons.remove_rounded),
+          ),
+        ],
       ),
     );
   }
