@@ -96,9 +96,16 @@ class TransportIcon extends StatelessWidget {
 }
 
 class SectionTitle extends StatelessWidget {
-  const SectionTitle(this.title, {this.trailing, super.key});
+  const SectionTitle(
+    this.title, {
+    this.trailing,
+    this.onTrailingTap,
+    super.key,
+  });
+
   final String title;
   final String? trailing;
+  final VoidCallback? onTrailingTap;
 
   @override
   Widget build(BuildContext context) {
@@ -112,12 +119,19 @@ class SectionTitle extends StatelessWidget {
           ),
         ),
         if (trailing != null)
-          Text(
-            trailing!,
-            style: TextStyle(
-              color: isDark ? const Color(0xFF8BB8FF) : AppColors.primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onTrailingTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
+                trailing!,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF8BB8FF) : AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
       ],

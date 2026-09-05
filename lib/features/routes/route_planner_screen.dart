@@ -15,7 +15,12 @@ import 'route_search_service.dart';
 import 'station_catalog.dart';
 
 class RoutePlannerScreen extends StatefulWidget {
-  const RoutePlannerScreen({super.key});
+  const RoutePlannerScreen({
+    super.key,
+    this.initialDestinationName,
+  });
+
+  final String? initialDestinationName;
 
   @override
   State<RoutePlannerScreen> createState() => _RoutePlannerScreenState();
@@ -60,6 +65,15 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
     _loadLocation();
   }
 
+  @override
+  void didUpdateWidget(covariant RoutePlannerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.initialDestinationName != widget.initialDestinationName) {
+      _applyInitialDestination();
+    }
+  }
+
   Future<void> _loadStations() async {
     setState(() {
       _loadingStations = true;
@@ -75,6 +89,8 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
         _stations = stations;
         _loadingStations = false;
       });
+
+      _applyInitialDestination();
     } catch (error) {
       if (!mounted) return;
 
@@ -85,6 +101,67 @@ class _RoutePlannerScreenState extends State<RoutePlannerScreen> {
 
       _message('GTFS station error: ${_errorText(error)}');
     }
+  }
+
+  void _applyInitialDestination() {
+    final query = widget.initialDestinationName?.trim();
+    if (query == null || query.isEmpty || _stations.isEmpty) return;
+
+    final current = _to;
+    if (current != null && _stationMatches(current.station.name, query)) {
+      return;
+    }
+
+    final station = _bestStationMatch(query);
+    if (station == null) return;
+
+    setState(() {
+      _to = station;
+      _clearResult();
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapController.move(station.point, 16);
+    });
+  }
+
+  RouteMapStationPoint? _bestStationMatch(String query) {
+    final filtered = _filteredStations();
+    if (filtered.isEmpty) return null;
+
+    RouteMapStationPoint? best;
+    var bestScore = 0.0;
+
+    for (final station in filtered) {
+      final score = _stationMatchScore(query, station.station.name);
+      if (score > bestScore) {
+        best = station;
+        bestScore = score;
+      }
+    }
+
+    return bestScore >= 0.48 ? best : null;
+  }
+
+  bool _stationMatches(String a, String b) {
+    return _stationMatchScore(a, b) >= 0.9;
+  }
+
+  double _stationMatchScore(String query, String stationName) {
+    final left = _normalise(query);
+    final right = _normalise(stationName);
+
+    if (left.isEmpty || right.isEmpty) return 0;
+    if (left == right) return 1;
+    if (left.contains(right) || right.contains(left)) return 0.96;
+
+    final leftTokens = left.split(' ').toSet();
+    final rightTokens = right.split(' ').toSet();
+    final intersection = leftTokens.intersection(rightTokens).length;
+    final union = leftTokens.union(rightTokens).length;
+
+    if (union == 0) return 0;
+    return intersection / union;
   }
 
   Future<void> _loadLocation() async {
